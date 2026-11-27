@@ -1,134 +1,14 @@
-// Sentinel HTTP server (Node built-ins only).
-// v1 routes in this build: health and the "steal my wallet" demo.
-// The full client API is specified in docs/SENTINEL-API.md.
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+// Sentinel as a long-lived local server. The routes are in handler.ts; on
+// Vercel the same handler runs as a function (vercel.ts).
+import { createServer } from "node:http";
 import { PROGRAM_ID } from "./chain.ts";
-import { createSession, decide, DemoError, demoPublic, ensureMint, phoneReady, prepareAttack, relayCall, startWatcher, submitAttack, subscribe, type AttackKind } from "./demo.ts";
+import { demoPublic } from "./demo.ts";
+import { ensureSchema } from "./db.ts";
+import { handle } from "./handler.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
-const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
 
-function cors(req: IncomingMessage, res: ServerResponse) {
-  const origin = req.headers.origin;
-  if (origin && ORIGINS.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  }
-}
-
-function json(res: ServerResponse, status: number, body: unknown) {
-  res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-  res.end(JSON.stringify(body));
-}
-
-function fail(res: ServerResponse, status: number, code: string, message: string) {
-  json(res, status, { error: { code, message } });
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  let size = 0;
-  const chunks: Buffer[] = [];
-  for await (const c of req) {
-    size += (c as Buffer).length;
-    if (size > 10_000) throw new DemoError(413, "Request too large.");
-    chunks.push(c as Buffer);
-  }
-  if (!chunks.length) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw new DemoError(400, "Body must be JSON.");
-  }
-}
-
-// Behind a host's proxy (Hugging Face, Render…) every request comes from the
-// proxy. TRUST_PROXY_HOPS=1 reads the address that proxy appended to
-// X-Forwarded-For. Entries further left are client-supplied and can be faked,
-// so they're never used. With 0 (local), the header is ignored.
-const PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? 0);
-
-function clientIp(req: IncomingMessage): string {
-  if (PROXY_HOPS > 0) {
-    const raw = req.headers["x-forwarded-for"];
-    const list = (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).split(",").map((x) => x.trim()).filter(Boolean);
-    const ip = list[list.length - PROXY_HOPS];
-    if (ip) return ip;
-  }
-  return req.socket.remoteAddress || "unknown";
-}
-
-const server = createServer(async (req, res) => {
-  cors(req, res);
-  if (req.method === "OPTIONS") {
-    res.writeHead(204).end();
-    return;
-  }
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const parts = url.pathname.split("/").filter(Boolean); // ["v1", ...]
-
-  try {
-    if (req.method === "GET" && url.pathname === "/v1/health") {
-      return json(res, 200, { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, version: "0.1.0" });
-    }
-
-    if (parts[0] === "v1" && parts[1] === "demo") {
-      // POST /v1/demo/session
-      if (req.method === "POST" && parts[2] === "session" && parts.length === 3) {
-        return json(res, 201, await createSession(clientIp(req)));
-      }
-      const id = parts[2];
-      // GET /v1/demo/:id/events  (Server-Sent Events)
-      if (req.method === "GET" && parts[3] === "events" && parts.length === 4) {
-        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-        res.write(": connected\n\n");
-        const unsub = subscribe(id, (e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
-        if (!unsub) {
-          res.write(`data: ${JSON.stringify({ t: Date.now(), type: "log", text: "This demo has expired. Start a new one.", tone: "threat" })}\n\n`);
-          return res.end();
-        }
-        const ping = setInterval(() => res.write(": ping\n\n"), 20_000);
-        req.on("close", () => {
-          clearInterval(ping);
-          unsub();
-        });
-        return;
-      }
-      // POST /v1/demo/:id/decision  { decision: "cancel" | "allow", via: "voice" | "button" }
-      if (req.method === "POST" && parts[3] === "decision" && parts.length === 4) {
-        const body = await readJson(req);
-        const d = body.decision === "allow" ? "allow" : body.decision === "cancel" ? "cancel" : null;
-        if (!d) throw new DemoError(400, "decision must be cancel or allow");
-        return json(res, 200, decide(id, d, body.via === "voice" ? "voice" : "button"));
-      }
-      // POST /v1/demo/:id/phone   (a phone joined as the owner's device)
-      if (req.method === "POST" && parts[3] === "phone" && parts.length === 4) {
-        return json(res, 200, phoneReady(id));
-      }
-      // POST /v1/demo/:id/call    { status?: "connected" | "ended", who?: "argus" | "owner", text? }
-      if (req.method === "POST" && parts[3] === "call" && parts.length === 4) {
-        return json(res, 200, relayCall(id, await readJson(req)));
-      }
-      // POST /v1/demo/:id/attack                 { kind }
-      // POST /v1/demo/:id/attack/:nonce          { signature }
-      if (req.method === "POST" && parts[3] === "attack") {
-        const body = await readJson(req);
-        if (parts.length === 4) return json(res, 200, await prepareAttack(id, String(body.kind) as AttackKind));
-        if (parts.length === 5) return json(res, 200, await submitAttack(id, parts[4], String(body.signature ?? "")));
-      }
-    }
-
-    fail(res, 404, "NOT_FOUND", "No such route.");
-  } catch (e) {
-    if (e instanceof DemoError) return fail(res, e.status, "DEMO_ERROR", e.message);
-    console.error("[sentinel] error:", (e as Error).message);
-    fail(res, 500, "INTERNAL", "Something went wrong. Please try again.");
-  }
-});
-
-await ensureMint();
-startWatcher();
-server.listen(PORT, () => {
+await ensureSchema();
+createServer(handle).listen(PORT, () => {
   console.log(`[sentinel] listening on :${PORT}  program ${PROGRAM_ID.toBase58()}  ai ${demoPublic.ai}`);
 });

@@ -11,6 +11,21 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - **Demo vault address:** _not created yet_
 
 ## Log
+- 2026-11-27 — Claude — **Sentinel now runs on Vercel, with Neon Postgres for state.** Hugging Face (Docker is paid now) and Railway (trial used) were dropped.
+  - **State:** the demo is in Postgres, not memory:
+    - tables `demo_sessions`, `demo_events` and `demo_moves`, created on first use;
+    - the 90s call is a deadline in the database, not a timer;
+    - the AI key acts only after an atomic `UPDATE … WHERE call->>'status' = 'awaiting'`, so it fires once even under races;
+    - the backup watcher runs during event polling (at most every 8s per session).
+  - **SSE is unchanged for clients,** with one addition: every event now has an `id:` line, and there's a `retry: 1000`. On Vercel a stream ends after about 50s, and the client reconnects with `Last-Event-ID`; the server resumes from there with no gaps or repeats. **Codex:** if your SSE parser ignores `id:` and `retry:` lines, nothing changes. To resume after a disconnect, send `Last-Event-ID` (or `?after=<id>`).
+  - **Build:** `sentinel/vercel.json` runs `npm run build:vercel` (esbuild into `.vercel/output`, one Node function, streaming on, 60s max).
+  - **Environment:** `DATABASE_URL`, `RPC_URL`, `ALLOWED_ORIGINS`, `TRUST_PROXY_HOPS=1`, and `KEY_FUNDER` / `KEY_AI_GUARDIAN` / `KEY_DEMO_GUARDIAN` / `KEY_DEMO_SAFE` (each the key file's JSON array). See `sentinel/.env.example`.
+  - **Tests:** smoke 9/9 against Neon, plus race and timeout checks:
+    - five simultaneous answers: one wins, and one cancel happens;
+    - a replayed move is refused (410);
+    - with no answer, the timeout cancels once, and a late answer gets 409;
+    - reconnects deliver no duplicates.
+    - The two-device browser run also passes.
 - 2026-11-27 — Claude — **The owner's real phone rings (QR handoff). Twilio dropped.**
   - **Twilio:** its trial can't own a number or connect one to an agent, and the upgrade costs $20 up front. Victor decided not to pay. Argus calls over the internet instead (ElevenLabs WebRTC): no phone number, so a SIM swap can't silence it.
   - **Web:** `/demo` shows a QR code linking to `/demo/phone/:session`.

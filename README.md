@@ -151,7 +151,7 @@ flowchart LR
 | Program tests | LiteSVM 0.15 (clock warping, no validator) |
 | Web | React 19, TypeScript 7, Vite 8, Tailwind CSS 4, React Router 7 |
 | Mobile | Expo SDK 58, React Native 0.88, Solana Mobile Wallet Adapter 3 |
-| Sentinel | Node 24 (built-in HTTP and TypeScript), @coral-xyz/anchor, @solana/web3.js, Server-Sent Events |
+| Sentinel | Node 24 (built-in HTTP and TypeScript), @coral-xyz/anchor, @solana/web3.js, Server-Sent Events, Postgres on Neon, Vercel Functions |
 | Voice | ElevenLabs Agents (Argus Guardian agent, client tools `cancel_withdrawal` / `allow_withdrawal`), `@elevenlabs/client` |
 | RPC | Helius (devnet) |
 
@@ -187,11 +187,13 @@ The vault app currently runs on a clearly labelled sample vault. The wallet conn
 cd sentinel
 npm install
 npm run setup:keys   # creates its keypairs in sentinel/keys/ (gitignored); prints public keys only
-# create sentinel/.env with RPC_URL (a devnet RPC), PROGRAM_ID, PORT=8787 and ALLOWED_ORIGINS
+cp .env.example .env # then set RPC_URL, DATABASE_URL (Postgres, e.g. Neon) and ALLOWED_ORIGINS
 # fund the "funder" and "ai-guardian" public keys with devnet SOL
 npm run dev          # http://localhost:8787/v1/health
-node src/smoke.ts    # end-to-end demo check against devnet
+node --env-file=.env src/smoke.ts   # end-to-end demo check against devnet
 ```
+
+Demo state lives in Postgres, not in memory, so the same code runs as a long-lived server or as a **Vercel function**. `vercel.json` builds it with `npm run build:vercel` (one bundled function, Build Output API). On Vercel, set the keys as environment variables (`KEY_FUNDER`, `KEY_AI_GUARDIAN`, `KEY_DEMO_GUARDIAN`, `KEY_DEMO_SAFE`, each the key file's JSON array) along with `DATABASE_URL`, `RPC_URL`, `ALLOWED_ORIGINS` and `TRUST_PROXY_HOPS=1`. See [`sentinel/.env.example`](sentinel/.env.example).
 
 The web app finds Sentinel through `VITE_SENTINEL_URL` (default `http://localhost:8787`). See [`app/.env.example`](app/.env.example).
 
@@ -252,6 +254,7 @@ argus/
 │   ├── tsconfig.app.json
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
+│   ├── vercel.json
 │   └── vite.config.ts
 ├── docs/                              # spec, threat model, audits, design, API contract
 │   ├── assets/
@@ -286,7 +289,9 @@ argus/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── DawnHero.tsx
+│   │   │   ├── GuardianCall.tsx
 │   │   │   ├── Intro.tsx
+│   │   │   ├── NativeVoice.tsx
 │   │   │   ├── SignalIcon.tsx
 │   │   │   ├── TransactionNotice.tsx
 │   │   │   ├── ui.tsx
@@ -294,6 +299,8 @@ argus/
 │   │   ├── domain/
 │   │   │   ├── demo.test.ts
 │   │   │   ├── demo.ts
+│   │   │   ├── guardianCall.test.ts
+│   │   │   ├── guardianCall.ts
 │   │   │   ├── vaultMetrics.test.ts
 │   │   │   └── vaultMetrics.ts
 │   │   ├── idl/
@@ -336,6 +343,7 @@ argus/
 │   │   ├── services/
 │   │   │   ├── demoEvents.ts
 │   │   │   ├── notifications.ts
+│   │   │   ├── voice.ts
 │   │   │   └── wallet.ts
 │   │   ├── polyfills.ts
 │   │   └── theme.ts
@@ -392,16 +400,23 @@ argus/
 │   ├── export-idl.mjs
 │   └── readme-tree.py
 ├── sentinel/                          # AI guardian service: demo, watcher, call, cancel/freeze
+│   ├── scripts/
+│   │   └── build-vercel.mjs
 │   ├── src/
 │   │   ├── chain.ts
+│   │   ├── db.ts
 │   │   ├── demo.ts
+│   │   ├── handler.ts
 │   │   ├── keys.ts
 │   │   ├── server.ts
 │   │   ├── setup-keys.ts
-│   │   └── smoke.ts
+│   │   ├── smoke.ts
+│   │   └── vercel.ts
+│   ├── .env.example
 │   ├── demo-config.json
 │   ├── package.json
-│   └── tsconfig.json
+│   ├── tsconfig.json
+│   └── vercel.json
 ├── AGENTS.md
 ├── Anchor.toml
 ├── Cargo.lock
@@ -438,9 +453,10 @@ argus/
 | Program | ✅ Deployed to devnet, 148 tests passing, audit round 1 done |
 | Web: landing page and vault app | ✅ Built (sample vault) |
 | Web: "steal my wallet" live demo | ✅ Live on devnet (Sentinel cancels and freezes on-chain) |
-| Sentinel: demo, watcher, cancel and freeze | ✅ Running locally |
+| Sentinel: demo, watcher, cancel and freeze | ✅ Built for Vercel and Neon; tested locally (smoke, race and timeout checks) |
 | Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
 | The owner's real phone rings: scan a QR on `/demo`, take the live ElevenLabs call on your phone, and the laptop follows along | ✅ Built (no phone number or Twilio needed) |
-| Sentinel: scam lookups, hosting | ⏳ Next |
+| Hosting: web and Sentinel on Vercel | ⏳ Deploying |
+| Sentinel: scam lookups | ⏳ Next |
 | Web: wallet connection and live devnet data | ⏳ Next |
 | Android app | 🔨 In progress |

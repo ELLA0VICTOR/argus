@@ -2,15 +2,13 @@
 // IDL the apps use), PDA helpers and error decoding.
 import { AnchorProvider, Program, BN, type Idl } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey, Transaction, type TransactionInstruction } from "@solana/web3.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { ROOT } from "./keys.ts";
+import idlJson from "../../app/src/idl/argus.json" with { type: "json" };
 
 export const RPC_URL = process.env.RPC_URL ?? "https://api.devnet.solana.com";
 export const connection = new Connection(RPC_URL, "confirmed");
 
-// The IDL is the one the web app ships (app/src/idl). IDL_PATH overrides it.
-export const idl = JSON.parse(readFileSync(process.env.IDL_PATH ?? join(ROOT, "..", "app", "src", "idl", "argus.json"), "utf8")) as Idl & {
+// The IDL is the one the web app ships (app/src/idl), bundled in at build time.
+export const idl = idlJson as unknown as Idl & {
   address: string;
   errors: { code: number; name: string; msg: string }[];
 };
