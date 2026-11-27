@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+dist/
+.program-check/
+android/
+ios/
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+credentials.json
+google-services.json
+

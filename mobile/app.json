@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Argus",
+    "slug": "argus-mobile",
+    "version": "0.1.0",
+    "scheme": "argus",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0c0f",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.argus.vault",
+      "versionCode": 1
+    },
+    "plugins": ["expo-font", "expo-secure-store", ["expo-notifications", { "defaultChannel": "argus-alerts" }]]
+  }
+}
