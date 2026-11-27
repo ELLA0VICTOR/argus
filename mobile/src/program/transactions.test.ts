@@ -7,6 +7,7 @@ import { DEVNET_GENESIS, checkTransaction, parseAmount, runTransaction, transact
 import { ARGUS_PROGRAM_ID } from './client.ts';
 import { ARGUS_ERRORS } from './errors.ts';
 import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 
 test('the required genesis matches the independently queried deployment cluster', () => {
   const observed = JSON.parse(readFileSync(new URL('../../../docs/audits/devnet-2026-11-27/deployment.json', import.meta.url), 'utf8'));

@@ -6,11 +6,12 @@ import type { Challenge } from '../sentinel/types';
 import { signatureFromSignedPayload } from '../sentinel/rules';
 
 export type WalletSession = { address: string; authToken: string };
+const walletIdentity = { name: 'Argus', uri: 'https://tryargus.vercel.app' };
 
 export async function connectWallet(): Promise<WalletSession> {
   if (Platform.OS !== 'android') throw new Error('Wallet connection requires an Android development build.');
   return transact(async wallet => {
-    const result = await wallet.authorize({ chain: 'solana:devnet', identity: { name: 'Argus', uri: 'https://argus.app' } });
+    const result = await wallet.authorize({ chain: 'solana:devnet', identity: walletIdentity });
     const account = result.accounts[0];
     if (!account) throw new Error('The wallet did not authorize an account.');
     return {
@@ -26,7 +27,7 @@ export async function disconnectWallet(session: WalletSession): Promise<void> {
 
 export async function signSentinelChallenge(session: WalletSession, challenge: Challenge): Promise<string> {
   return transact(async wallet => {
-    const authorization = await wallet.authorize({ chain: 'solana:devnet', identity: { name: 'Argus', uri: 'https://argus.app' }, auth_token: session.authToken });
+    const authorization = await wallet.authorize({ chain: 'solana:devnet', identity: walletIdentity, auth_token: session.authToken });
     session.authToken = authorization.auth_token;
     const account = authorization.accounts.find(a => new PublicKey(Buffer.from(a.address, 'base64')).toBase58() === session.address);
     if (!account) throw new Error('The wallet account changed. Reconnect and sign in again.');
@@ -46,7 +47,7 @@ export async function signWalletTransaction(session: WalletSession, transaction:
   if (Platform.OS !== 'android') throw new Error('Wallet transactions require an Android development build.');
   return transact(async wallet => {
     const authorization = await wallet.authorize({ chain: 'solana:devnet',
-      identity: { name: 'Argus', uri: 'https://argus.app' }, auth_token: session.authToken });
+      identity: walletIdentity, auth_token: session.authToken });
     session.authToken = authorization.auth_token;
     const match = authorization.accounts.some(a => new PublicKey(Buffer.from(a.address, 'base64')).toBase58() === session.address);
     if (!match) throw new Error('The wallet account changed. Reconnect before signing.');

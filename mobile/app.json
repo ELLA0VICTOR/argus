@@ -8,16 +8,50 @@
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffffff",
     "icon": "./assets/icon.png",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "android": {
       "package": "com.argus.vault",
       "versionCode": 1,
-      "permissions": ["android.permission.RECORD_AUDIO", "android.permission.VIBRATE"],
-      "blockedPermissions": ["android.permission.CAMERA"],
-      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#ffffff" }
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.VIBRATE"
+      ],
+      "blockedPermissions": [
+        "android.permission.CAMERA"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
-    "plugins": ["expo-font", "expo-secure-store", ["expo-notifications", { "defaultChannel": "argus-alerts", "icon": "./assets/notification-icon.png" }],
-      ["@livekit/react-native-expo-plugin", { "android": { "audioType": "communication", "enableScreenShareService": false } }],
-      "@config-plugins/react-native-webrtc"]
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "argus-alerts",
+          "icon": "./assets/notification-icon.png"
+        }
+      ],
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "audioType": "communication",
+            "enableScreenShareService": false
+          }
+        }
+      ],
+      "@config-plugins/react-native-webrtc"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "568c7aa0-0130-498e-b56f-5f93af5bda9b"
+      }
+    },
+    "owner": "vickytor"
   }
 }

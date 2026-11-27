@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import { test } from 'node:test';
 import { BorshInstructionCoder } from '@anchor-lang/core';
 import { Connection, PublicKey, SystemProgram, type AccountInfo, type TransactionInstruction } from '@solana/web3.js';

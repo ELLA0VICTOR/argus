@@ -1,0 +1,17 @@
+# Read from mobile/ when EAS_PROJECT_ROOT is set by scripts/build-android.mjs.
+.git/
+node_modules/
+.expo/
+dist/
+.program-check/
+android/
+ios/
+.env
+.env.*
+!.env.example
+keys/
+*.keypair.json
+*.jks
+*.keystore
+credentials.json
+google-services.json

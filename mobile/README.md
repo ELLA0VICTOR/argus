@@ -10,6 +10,12 @@ Home shares the web app’s Protected/Frozen status pill, today’s instant-allo
 
 Use Node 24 and npm. Windows PowerShell may require `npm.cmd` / `npx.cmd`.
 
+EAS is linked to **[@vickytor/argus-mobile](https://expo.dev/accounts/vickytor/projects/argus-mobile)**, project ID `568c7aa0-0130-498e-b56f-5f93af5bda9b`. The public project ID is in app config; account/session credentials remain outside the repository. The light Android theme uses `expo-system-ui`.
+
+The Solana SDK's older codec dependencies require TypeScript 5, so this app uses `~5.9.3` and excludes only TypeScript from Expo's compiler-version recommendation. The actual TypeScript check remains required and passes. React DOM is pinned to the same version as React for LiveKit's optional web peer dependency. A clean npm install is validated before cloud builds. MWA authorization identifies the app with its owned website, `https://tryargus.vercel.app`.
+
+The npm build scripts scope EAS uploads to `mobile/` using its `.easignore`, so backend keys and ignored native/audit scratch output are excluded. `npm.cmd run inspect:archive` previews the upload under ignored `.program-check/eas-mobile-archive` (use a new output directory or remove that preview before repeating). This uses EAS's supported no-VCS upload mode; commit/push still happen through Git separately. The current development build is [992ad6a2](https://expo.dev/accounts/vickytor/projects/argus-mobile/builds/992ad6a2-8847-4916-9669-5cfe0b0f5c40), using the 293 KB mobile-only archive. The first build [e5086e85](https://expo.dev/accounts/vickytor/projects/argus-mobile/builds/e5086e85-9b45-4b36-948a-bebf943af86d) failed at clean dependency installation; the compiler/lockfile fix above is included in the retry. Its original monorepo archive excluded key files and `.env`, but included unnecessary public scratch artifacts.
+
 ```powershell
 cd mobile
 npm.cmd ci
@@ -55,19 +61,21 @@ The TrustedAddress gap is fixed. Non-default SetAiGuardian execution supplies th
 
 ## Sentinel, sample mode and push
 
-### Local live theft demo
+### Hosted live theft demo
 
-The local Sentinel v0 runs on port 8787. It currently implements health and demo endpoints; the regular authenticated wallet/contact/alert API is still separate and pending. Do not point `EXPO_PUBLIC_SENTINEL_URL` at v0 and expect phone/contact endpoints to work.
+The app and all three EAS build profiles default to **`https://argus-sentinel-six.vercel.app`**, the hosted Sentinel demo service. The website is `https://tryargus.vercel.app`. Local Sentinel still runs on port 8787. The hosted service implements health and demo endpoints; the regular authenticated wallet/contact/alert API is still separate and pending. Do not point `EXPO_PUBLIC_SENTINEL_URL` at this service and expect those endpoints to work.
 
 Use **Try the live theft demo** for a real devnet session. The mobile client checks health/program/AI identity, receives a disposable demo owner, keeps its seed only in memory and submits only a signature for a verified Argus move. It checks the instruction kind, session accounts and test-token amount before signing. It never uses the connected MWA wallet for this demo and never receives the AI guardian signing key. The live SSE log shows risk, incoming/decision events and confirmed transactions. The demo owner can choose Cancel or confirm the request was theirs; confirmation preserves the original delay. On no answer, Sentinel protects the high-risk session automatically.
 
-Set a phone-reachable URL separately:
+Override the public demo URL only when testing another deployment or your local server:
 
 ```dotenv
-EXPO_PUBLIC_SENTINEL_DEMO_URL=https://your-sentinel-tunnel.example
+EXPO_PUBLIC_SENTINEL_DEMO_URL=https://argus-sentinel-six.vercel.app
 ```
 
-In development, the app infers Metro's host on port 8787 if this is unset. Private-host HTTP is allowed only in development. For USB, use `adb reverse tcp:8787 tcp:8787` with `http://127.0.0.1:8787`; WSL/LAN setups may need host forwarding. Production/standalone builds require HTTPS. The health response must match the announced devnet program and AI public address. Vault creation prefills the announced AI public address and dUSDC mint; clear the AI field to disable it.
+When unset, the app uses the hosted HTTPS endpoint rather than Metro's host. Private-host HTTP is allowed only in development. For USB, override with `http://127.0.0.1:8787` and use `adb reverse tcp:8787 tcp:8787`; WSL/LAN setups may need host forwarding. Production/standalone builds require HTTPS. The health response must match the announced devnet program and AI public address. Vault creation prefills the announced AI public address and dUSDC mint; clear the AI field to disable it.
+
+Vercel closes each live event stream after roughly 50 seconds. Mobile retains the last complete, accepted event ID and reconnects using `?after=<id>`. Numbered events are deduplicated by ID, including equal or out-of-order timestamps; partial frames are discarded on reconnect. Server retry hints are bounded to 1–30 seconds. Foreground resume preserves the same cursor; closing a demo subscription discards it. Older unnumbered local streams retain their timestamp/content fallback.
 
 ### In-app Argus calls
 
@@ -81,7 +89,7 @@ Mute, connection timeout, permission denial, disconnect and Back all retain the 
 
 For **normal production push alerts**, a foreground notification opens the alert; a background/cold notification opens it on tap. After authenticated detail and owner-role checks, an open high/critical withdrawal opens the same incoming-call screen. Amounts, destinations and actions never come from push data. The existing v1 contract has no production voice-decision route: **Cancel still opens MWA and must confirm on-chain; Allow calls the authenticated dismiss endpoint and keeps the withdrawal delay.** Demo `/decision` is never used for ordinary vaults. Guardian/sample/resolved alerts do not auto-ring. Delivery needs the hosted authenticated Sentinel API plus EAS/FCM; there is no OS lock-screen call service or background microphone recording.
 
-`npm.cmd run smoke:sentinel -- http://127.0.0.1:8787` creates a throwaway live devnet session and checks seven outcomes through the same client: blocked drain/trusted moves, allowed daily spending, delayed request, AI cancellation/freeze and rejection after freeze. It prints public session/transaction IDs and results only; no key is written to disk. This smoke uses real devnet test-token transactions and the server's demo funding.
+`npm.cmd run smoke:sentinel` defaults to the hosted endpoint; pass `-- http://127.0.0.1:8787` to test local Sentinel. It creates a throwaway live devnet session and checks eight outcomes through the same client: blocked drain/trusted moves, allowed daily spending, numbered event-stream reconnection, delayed request, AI cancellation/freeze and rejection after freeze. It prints public session/transaction IDs and results only; no key is written to disk. This smoke uses real devnet test-token transactions and the server's demo funding.
 
 Explore the sample vault opens explicitly simulated balances and actions. The alerts/contact client defaults to an in-process contract mock while Sentinel is offline; its sample banner applies to those screens, not live devnet vaults.
 
@@ -106,7 +114,7 @@ npm.cmd run export:android
 
 Tests cover IDL parity/decoding, all 14 builders, exact amounts, allowance reset/limit boundaries, per-request wait progress, optional RPC history failure, devnet guard, changed/unsigned/refused wallet payloads, pre-sign simulation failure, confirmation and recovery without resending, plus Sentinel auth/contact/alert behavior. Call tests cover authenticated owner eligibility, voice context, decision races/deduplication/expiry, retryable delivery, late connection teardown, microphone controls and exact decision/caption requests. Android export checks JavaScript/assets, not native wallet or live microphone compatibility.
 
-Validated on 2026-11-27: **59/59 tests**, TypeScript, Expo dependency compatibility, Android export and Expo native-config introspection pass. The introspected manifest has microphone permission, communication audio routing, screen-sharing disabled and camera removed. The earlier separate local-service live demo smoke passed **7/7**. Public-RPC genesis verification also passes. EAS/FCM are not configured and adb is unavailable in this workspace; physical-device results remain pending. Probe build artifacts live under ignored `mobile/.program-check/audits/`; `docs/audits/` contains readable source/results/manifests only.
+Validated on 2026-11-27: **63/63 tests** and TypeScript pass, including numbered SSE replay/resume, interrupted frames, retry limits and older-stream compatibility. Android native prebuild succeeds; its generated manifest has microphone permission, communication audio routing, screen-sharing disabled and camera removed. Expo compatibility, Android export and native-config introspection pass. The **hosted mobile smoke passes 8/8**, including two numbered SSE connections resuming through event 213, blocked drain/untrusted moves, allowed daily spending, delayed request, Sentinel cancellation/freeze and rejection after freeze. Hosted deep health reports database and RPC healthy. The initial session-creation failure was Sentinel's dependency needing `__filename` in its Vercel bundle; a standalone database query alone did not diagnose that full-bundle problem. It is fixed upstream. EAS login/project linking is complete; APK build and physical-device results are tracked separately. FCM is not configured and adb is unavailable. Native sources/build output stay under ignored `mobile/android/`, `mobile/.program-check/` and `mobile/dist/`; `docs/audits/` contains readable evidence only.
 
 After EAS setup, check the intro/hero, fonts, large text, keyboard, Back and reduced motion. Connect/open/create a test-token vault; reject a wallet request and switch accounts. Deposit a small amount, request/cancel/freeze, then approve/apply Unfreeze with a guardian. Test instant/trusted sends, matured execution and cleanup/refunds. Interrupt connectivity after signing and recover the saved signature after restart. Separately test sample contact registration, local notification taps and cold deep links; test remote delivery/live-alert actions once Sentinel/FCM are ready.
 

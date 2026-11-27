@@ -8,6 +8,7 @@ import { ArgusClient, ARGUS_PROGRAM_ID } from '../program/client.ts';
 
 export const SENTINEL_AI_GUARDIAN = 'DDZHZxxtYEwjttMJMoipr7tXuyPy6BmCCu4ECUi8Jppm';
 export const DEMO_MINT = 'EXa24Mj3YsFxhhgohtBqYUSgy71AQrd9XtC64pZB9fhQ';
+export const HOSTED_SENTINEL_DEMO_URL = 'https://argus-sentinel-six.vercel.app';
 export type AttackKind = 'drain' | 'trusted' | 'allowance' | 'request';
 export type DemoSession = { session: string; vault: string; vaultToken: string; owner: string; thief: string; thiefToken: string; mint: string; setupTx: string;
   rules: { dailyLimit: string; delayHours: number; funds: string } };
@@ -49,7 +50,7 @@ export class SentinelDemoClient {
       if (!response.ok) throw new Error(typeof data?.error?.message === 'string' ? data.error.message : 'Sentinel could not complete this demo request.');
       return data;
     } catch (error) {
-      if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) throw new Error('Could not reach the local Sentinel. Check the demo URL, USB forwarding or HTTPS tunnel, then retry.');
+      if (error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) throw new Error('Could not reach Sentinel. Check your connection and demo URL, then retry.');
       throw error;
     } finally { clearTimeout(timer); }
   }
@@ -123,21 +124,57 @@ export class SentinelDemoClient {
 /** Incremental SSE framing, including split chunks and CRLF, without depending on browser EventSource. */
 export class DemoEventDecoder {
   private buffer = '';
-  private emit: (event: DemoEvent) => void;
-  constructor(emit: (event: DemoEvent) => void) { this.emit = emit; }
+  private emit: (event: DemoEvent, id?: string) => void;
+  private retry: (milliseconds: number) => void;
+  constructor(emit: (event: DemoEvent, id?: string) => void, retry: (milliseconds: number) => void = () => {}) { this.emit = emit; this.retry = retry; }
   feed(chunk: string) {
     this.buffer += chunk;
     if (this.buffer.length > 200_000) throw new Error('Sentinel sent an oversized event.');
     const frames = this.buffer.split(/\r?\n\r?\n/); this.buffer = frames.pop()!;
     for (const frame of frames) {
-      const body = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+      const lines: string[] = []; let id: string | undefined;
+      for (const line of frame.split(/\r?\n/)) {
+        const colon = line.indexOf(':'); if (colon <= 0) continue;
+        const field = line.slice(0, colon); const value = line.slice(colon + 1).replace(/^ /, '');
+        if (field === 'data') lines.push(value);
+        if (field === 'id' && /^[1-9]\d{0,15}$/.test(value) && Number.isSafeInteger(Number(value))) id = value;
+        if (field === 'retry' && /^\d+$/.test(value) && Number.isSafeInteger(Number(value))) this.retry(Math.max(1000, Math.min(30_000, Number(value))));
+      }
+      const body = lines.join('\n');
       if (!body) continue;
       try {
         const event = JSON.parse(body) as DemoEvent;
         if (!isDemoEvent(event)) continue;
-        this.emit(event);
+        this.emit(event, id);
       } catch { /* Ignore malformed frames, without interpreting them as a resolved action. */ }
     }
+  }
+}
+
+/** One cursor per demo subscription, with a fresh frame buffer for each connection. */
+export class DemoEventCursor {
+  lastId: string | undefined;
+  retryMs = 4000;
+  private latestTime = 0;
+  private readonly seen = new Set<string>();
+  private readonly emit: (event: DemoEvent) => void;
+  constructor(emit: (event: DemoEvent) => void) { this.emit = emit; }
+  decoder() {
+    return new DemoEventDecoder((event, id) => {
+      if (id) {
+        if (this.lastId && BigInt(id) <= BigInt(this.lastId)) return;
+        this.emit(event); this.lastId = id;
+        return;
+      }
+      // Compatibility with the old local service and unnumbered expiry notices.
+      if (event.t < this.latestTime) return;
+      if (event.t > this.latestTime) { this.latestTime = event.t; this.seen.clear(); }
+      const identity = JSON.stringify(event); if (this.seen.has(identity)) return;
+      this.emit(event); this.seen.add(identity);
+    }, milliseconds => { this.retryMs = milliseconds; });
+  }
+  url(base: string, session: string) {
+    return `${base}/v1/demo/${encodeURIComponent(session)}/events${this.lastId ? `?after=${this.lastId}` : ''}`;
   }
 }
 

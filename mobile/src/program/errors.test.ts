@@ -1,5 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import { test } from 'node:test';
 import { ARGUS_ERRORS, UNKNOWN_TRANSACTION_MESSAGE, argusErrorForCode, transactionErrorMessage } from './errors.ts';
 import { RESERVED_PROGRAM_ID } from '../sentinel/rules.ts';

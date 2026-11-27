@@ -39,3 +39,16 @@ Unit coverage includes private-development URL restrictions, session key exclusi
 ## Build-output cleanup
 
 Downloaded `.so` files and deploy staging were moved out of `docs/audits/` into ignored `mobile/.program-check/audits/`. Both probe runners now direct binaries/libraries/object outputs there; the devnet runner also places compiler temporary files there. The relocated helper-only run passed all five tests. A recursive audit-directory scan found no `.o`, `.rlib`, `.so`, `.pyc`, `probe-bin`, `unit-bin` or `deploy/` outputs. Audit sources, results and manifests remain readable here.
+
+## Hosted service update: 8/8
+
+After Sentinel's Vercel bundling fix (`__filename` / `__dirname` for a dependency), reran the mobile smoke against `https://argus-sentinel-six.vercel.app`. Deep health returned HTTP 200 with the expected devnet program/AI address and both database and RPC healthy. The earlier database-connect error was not enough to diagnose the full bundled handler; direct database queries had succeeded locally.
+
+- Session/vault: `7f3za8327PTdtSWrUpHoKSrHYhErxuU2qocBbL97qAjx`
+- Setup transaction: `3t1cn7BBBLxRDx4s2Vw3AEtrz9HHwPuogjAPBfgrp6yDc5u8qaWRXnrGHkJa35oo89KZWSN3bJh2AaCnqL7byHBW`
+- **8/8 checks passed:** rejected drain and untrusted moves, allowed daily spending, numbered event-stream reconnection, delayed request, Sentinel cancellation, Sentinel freeze and rejection after freeze.
+- Two SSE connections; forced reconnection resumed after event `195`, continued through event `213`, and delivered 25 events to the smoke client.
+
+Mobile now defaults to the hosted demo URL. It resumes Vercel's short-lived streams with the last accepted event ID using `?after=<id>`, honors bounded retry hints and discards incomplete frames when reconnecting. Tests cover replays, equal/out-of-order timestamps, partial frames, invalid cursors and older unnumbered local streams. Unit/behavior checks are now **63/63**, with TypeScript, Android export, native prebuild and Expo Doctor **20/20** passing.
+
+Since the original local check above, the native ElevenLabs call implementation has been added. Its live microphone/MWA/notification behavior still requires a physical-phone test. The authenticated ordinary-alert backend and FCM remain separate from the hosted demo. No monitoring private key or RPC secret was embedded in mobile. The first EAS development APK build is `e5086e85-9b45-4b36-948a-bebf943af86d`; its outcome and download link are tracked in HANDOFF.

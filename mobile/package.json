@@ -14,8 +14,9 @@
     "check:program-bundle": "expo export:embed --entry-file src/program/bundle-check.ts --platform android --dev false --bundle-output .program-check/index.android.bundle --max-workers 2",
     "assets:brand": "node scripts/brand-assets.mjs",
     "smoke:sentinel": "node --experimental-strip-types scripts/smoke-sentinel.ts",
-    "build:development": "npx eas-cli@latest build --platform android --profile development",
-    "build:preview": "npx eas-cli@latest build --platform android --profile preview"
+    "build:development": "node scripts/build-android.mjs development",
+    "build:preview": "node scripts/build-android.mjs preview",
+    "inspect:archive": "node scripts/build-android.mjs development --inspect"
   },
   "dependencies": {
     "@anchor-lang/core": "^1.2.2",
@@ -43,6 +44,7 @@
     "expo-notifications": "~58.1.10",
     "expo-secure-store": "~58.0.3",
     "expo-status-bar": "~58.0.5",
+    "expo-system-ui": "~58.0.7",
     "livekit-client": "^2.25.0",
     "react": "19.3.0",
     "react-native": "0.88.1",
@@ -52,10 +54,19 @@
     "react-native-safe-area-context": "~5.11.1",
     "react-native-svg": "^15.16.0"
   },
+  "overrides": {
+    "react-dom": "$react"
+  },
+  "expo": {
+    "install": {
+      "exclude": ["typescript"]
+    }
+  },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.19.4",
     "@types/react": "~19.3.0",
-    "typescript": "~6.0.3"
+    "react-dom": "19.3.0",
+    "typescript": "~5.9.3"
   }
 }

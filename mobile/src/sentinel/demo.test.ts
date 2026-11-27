@@ -6,7 +6,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { Buffer } from 'buffer';
 import bs58 from 'bs58';
 import { ArgusClient } from '../program/client.ts';
-import { SentinelDemoClient, DEMO_MINT, SENTINEL_AI_GUARDIAN, DemoEventDecoder, demoUrl, type DemoEvent } from './demo.ts';
+import { SentinelDemoClient, DEMO_MINT, SENTINEL_AI_GUARDIAN, DemoEventCursor, DemoEventDecoder, demoUrl, type DemoEvent } from './demo.ts';
 
 test('local demo HTTP is restricted to private development hosts; full/release URLs need HTTPS', () => {
   assert.equal(demoUrl('http://127.0.0.1:8787/', true), 'http://127.0.0.1:8787');
@@ -95,4 +95,46 @@ test('SSE decoder handles split frames, CRLF, keepalives and rejects malformed/u
   assert.equal(received.length, 4); assert.equal(received[2].type, 'incoming'); assert.equal(received[3].type, 'decision');
   decoder.feed('data: {"t":7,"type":"phone","status":"ready"}\n\ndata: {"t":8,"type":"call","who":"argus","text":"","status":"connected"}\n\n');
   assert.equal(received.length, 6); assert.equal(received[4].type, 'phone'); assert.equal(received[5].type, 'call');
+});
+
+const logFrame = (id: string, t: number, text: string) => `id: ${id}\ndata: ${JSON.stringify({ t, type: 'log', text })}\n\n`;
+
+test('server event IDs resume across connections without repeats, including equal or out-of-order timestamps', () => {
+  const received: DemoEvent[] = []; const cursor = new DemoEventCursor(event => received.push(event));
+  const first = cursor.decoder();
+  first.feed('retry: 1000\n\n' + logFrame('8', 100, 'First') + logFrame('9', 100, 'Same time'));
+  assert.equal(cursor.retryMs, 1000);
+  assert.equal(cursor.url('https://sentinel.example', 'vault'), 'https://sentinel.example/v1/demo/vault/events?after=9');
+  const resumed = cursor.decoder();
+  resumed.feed(logFrame('8', 100, 'First') + logFrame('9', 100, 'Same time') + logFrame('10', 99, 'Earlier clock') + logFrame('11', 100, 'Same time'));
+  assert.deepEqual(received.map(event => event.type === 'log' ? event.text : ''), ['First', 'Same time', 'Earlier clock', 'Same time']);
+  assert.equal(cursor.lastId, '11');
+});
+
+test('a broken connection never joins a partial old frame to the next stream or advances its cursor', () => {
+  const received: DemoEvent[] = []; const cursor = new DemoEventCursor(event => received.push(event));
+  const first = cursor.decoder(); first.feed(logFrame('20', 1, 'Delivered') + 'id: 21\ndata: {"t":');
+  assert.equal(cursor.lastId, '20');
+  cursor.decoder().feed(logFrame('21', 2, 'Recovered'));
+  assert.equal(received.length, 2); assert.equal(cursor.lastId, '21');
+  assert.equal(new DemoEventCursor(() => {}).url('https://sentinel.example', 'a/b'), 'https://sentinel.example/v1/demo/a%2Fb/events');
+});
+
+test('retry hints are bounded and malformed or unsafe cursors cannot alter the resume request', () => {
+  const cursor = new DemoEventCursor(() => {}); const decoder = cursor.decoder();
+  decoder.feed('retry: 0\n\n'); assert.equal(cursor.retryMs, 1000);
+  decoder.feed('retry: 60000\n\n'); assert.equal(cursor.retryMs, 30000);
+  decoder.feed('retry: nonsense\n\n'); assert.equal(cursor.retryMs, 30000);
+  decoder.feed(logFrame('9007199254740991', 1, 'Largest server-supported ID'));
+  assert.equal(cursor.lastId, '9007199254740991');
+  decoder.feed(logFrame('9007199254740992', 2, 'Unsafe') + logFrame('2&extra=yes', 3, 'Malformed'));
+  assert.equal(cursor.lastId, '9007199254740991');
+  assert(cursor.url('https://sentinel.example', 'vault').endsWith('?after=9007199254740991'));
+});
+
+test('old local streams without IDs still deduplicate replayed events', () => {
+  const received: DemoEvent[] = []; const cursor = new DemoEventCursor(event => received.push(event));
+  cursor.decoder().feed('data: {"t":1,"type":"log","text":"Once"}\n\n');
+  cursor.decoder().feed('data: {"t":1,"type":"log","text":"Once"}\n\ndata: {"t":2,"type":"log","text":"Next"}\n\n');
+  assert.equal(received.length, 2); assert.equal(cursor.lastId, undefined);
 });

@@ -1,15 +1,23 @@
 {
-  "cli": { "version": ">= 16.0.0" },
+  "cli": { "version": ">= 16.0.0", "appVersionSource": "local" },
   "build": {
     "development": {
+      "environment": "development",
+      "env": { "EXPO_PUBLIC_SENTINEL_DEMO_URL": "https://argus-sentinel-six.vercel.app" },
       "developmentClient": true,
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
     "preview": {
+      "environment": "preview",
+      "env": { "EXPO_PUBLIC_SENTINEL_DEMO_URL": "https://argus-sentinel-six.vercel.app" },
       "distribution": "internal",
       "android": { "buildType": "apk" }
     },
-    "production": { "android": { "buildType": "apk" } }
+    "production": {
+      "environment": "production",
+      "env": { "EXPO_PUBLIC_SENTINEL_DEMO_URL": "https://argus-sentinel-six.vercel.app" },
+      "android": { "buildType": "apk" }
+    }
   }
 }
