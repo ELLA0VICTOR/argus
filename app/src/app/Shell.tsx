@@ -21,9 +21,6 @@ export function Shell({ children }: { children: ReactNode }) {
       <Sidebar />
       <div className="relative flex min-w-0 flex-col">
         <MobileTop />
-        <div className="absolute top-5 right-6 z-30 hidden lg:block xl:right-8">
-          <WalletButton />
-        </div>
         <main className="flex-1 pb-28 lg:pb-16">{children}</main>
       </div>
       <TabBar />
@@ -53,11 +50,46 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <div className="mt-auto p-4">
+        <SidebarWallet />
+      </div>
     </aside>
   );
 }
 
 /** Top-right wallet control: "Connect wallet", or the connected wallet with its menu. */
+/** Bottom of the sidebar: "Connect wallet", or the connected wallet with its menu (opens upward). */
+function SidebarWallet() {
+  const { publicKey, connecting } = useWallet();
+  const { open } = useConnectModal();
+  const [menu, setMenu] = useState(false);
+  if (!publicKey)
+    return (
+      <button type="button" onClick={open} className="press btn-brand flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-medium text-white">
+        <Icon name="wallet" size={16} /> {connecting ? "Connecting…" : "Connect wallet"}
+      </button>
+    );
+  return (
+    <div className="relative">
+      {menu && <AccountMenu onClose={() => setMenu(false)} className="right-0 bottom-full left-0 mb-2" />}
+      <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3 text-left transition-colors hover:border-line-strong">
+        <WalletAvatar size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-mono text-[12.5px] font-medium">{shortAddr(publicKey.toBase58())}</span>
+          <SolLine />
+        </span>
+        <Icon name="chevron-down" size={15} className={`text-muted transition-transform ${menu ? "rotate-180" : ""}`} />
+      </button>
+    </div>
+  );
+}
+
+function SolLine() {
+  const sol = useSolBalance();
+  return <span className="num block text-[11.5px] text-muted">{sol === null ? "…" : `${sol.toLocaleString("en-US", { maximumFractionDigits: 3 })} SOL`}</span>;
+}
+
+/** Phone header: compact connect button or address chip. */
 function WalletButton({ compact = false }: { compact?: boolean }) {
   const { publicKey, connecting } = useWallet();
   const { open } = useConnectModal();
