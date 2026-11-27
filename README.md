@@ -42,7 +42,7 @@
 | --- | --- |
 | **Program (devnet)** | [`4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`](https://explorer.solana.com/address/4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh?cluster=devnet) |
 | **Web app** | Run locally (see [Getting started](#getting-started)). The hosted link will be added here when it's deployed. |
-| **"Steal my wallet" demo** | `/demo` in the web app. You get a fresh devnet vault holding 12,000 test dollars, plus its real owner key. Try to drain it: every move is a real transaction against the program, and Argus stops you live. It scores the request, then calls you as the owner: a real AI voice call in the browser (ElevenLabs). Say "cancel", and it cancels and freezes on-chain with its cancel-only key. No wallet or sign-up needed. |
+| **"Steal my wallet" demo** | `/demo` in the web app. You get a fresh devnet vault holding 12,000 test dollars, plus its real owner key. Try to drain it: every move is a real transaction against the program, and Argus stops you live. It scores the request, then calls you as the owner: a real AI voice call (ElevenLabs), in the browser or on your own phone if you scan the QR code. Say "cancel", and it cancels and freezes on-chain with its cancel-only key. No wallet or sign-up needed. |
 | **Android app** | [`mobile/`](mobile/). The APK link will be added here when the build is published. |
 
 > **Devnet only.** Argus has not been audited by a third party. Use test tokens.
@@ -229,7 +229,9 @@ argus/
 │   │   │   └── ui.tsx
 │   │   ├── demo/                      # "steal my wallet" live demo
 │   │   │   ├── DemoPage.tsx
-│   │   │   └── IncomingCall.tsx
+│   │   │   ├── IncomingCall.tsx
+│   │   │   ├── PhonePage.tsx
+│   │   │   └── QrCode.tsx
 │   │   ├── idl/                       # program IDL + TS types (scripts/export-idl.mjs)
 │   │   │   ├── argus.json
 │   │   │   └── argus.ts
@@ -260,7 +262,8 @@ argus/
 │   │   ├── codex-r1-manifest-final.json
 │   │   ├── codex-r1-manifest.json
 │   │   ├── codex-r1-reconciliation.md
-│   │   └── codex-r1.md
+│   │   ├── codex-r1.md
+│   │   └── codex-sentinel-2026-11-27.md
 │   ├── AUDIT-CHECKLIST.md
 │   ├── CONTEXT.md
 │   ├── DEMO-SCRIPT.md
@@ -286,10 +289,13 @@ argus/
 │   │   │   ├── Intro.tsx
 │   │   │   ├── SignalIcon.tsx
 │   │   │   ├── TransactionNotice.tsx
-│   │   │   └── ui.tsx
+│   │   │   ├── ui.tsx
+│   │   │   └── VaultPatterns.tsx
 │   │   ├── domain/
 │   │   │   ├── demo.test.ts
-│   │   │   └── demo.ts
+│   │   │   ├── demo.ts
+│   │   │   ├── vaultMetrics.test.ts
+│   │   │   └── vaultMetrics.ts
 │   │   ├── idl/
 │   │   │   ├── argus.json
 │   │   │   ├── argus.ts
@@ -434,7 +440,7 @@ argus/
 | Web: "steal my wallet" live demo | ✅ Live on devnet (Sentinel cancels and freezes on-chain) |
 | Sentinel: demo, watcher, cancel and freeze | ✅ Running locally |
 | Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
-| Real outbound phone call (Twilio + ElevenLabs) | ⏳ Waiting on the Twilio number |
+| The owner's real phone rings: scan a QR on `/demo`, take the live ElevenLabs call on your phone, and the laptop follows along | ✅ Built (no phone number or Twilio needed) |
 | Sentinel: scam lookups, hosting | ⏳ Next |
 | Web: wallet connection and live devnet data | ⏳ Next |
 | Android app | 🔨 In progress |

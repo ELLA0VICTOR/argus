@@ -4,7 +4,8 @@ import { Wordmark } from "../components/Logo";
 import { Icon } from "../components/Icon";
 import { explorerAddr, explorerTx, shortAddr } from "../lib/format";
 import { attack, startDemo, streamEvents, type AttackKind, type AttackResult, type DemoEvent, type DemoSession } from "../lib/sentinel";
-import { IncomingCall } from "./IncomingCall";
+import { IncomingCall, type Line, type RemoteCall } from "./IncomingCall";
+import { QrCode } from "./QrCode";
 
 /**
  * "Steal my wallet": a live devnet heist. The visitor gets a real vault's owner
@@ -235,6 +236,14 @@ function ArgusPanel({ session, events, stopped }: { session: string; events: Dem
   const timedOut = events.some((e) => e.type === "log" && e.text.startsWith("No answer"));
   const decided = decision?.decision ?? (timedOut ? "timeout" : null);
   const feed = events.filter((e) => e.type === "log" || e.type === "tx");
+  const phoneJoined = events.some((e) => e.type === "phone");
+  const remote = useMemo<RemoteCall | null>(() => {
+    if (!phoneJoined) return null;
+    const calls = events.filter((e) => e.type === "call") as Extract<DemoEvent, { type: "call" }>[];
+    const last = [...calls].reverse().find((c) => c.status)?.status;
+    const lines: Line[] = calls.filter((c) => c.text).map((c) => ({ who: c.who === "argus" ? "argus" : "you", text: c.text }));
+    return { status: last === "connected" || last === "ended" ? last : "ringing", lines };
+  }, [events, phoneJoined]);
   const status = stopped ? "stopped" : incoming && !decided ? "calling" : risk ? "threat" : events.some((e) => e.type === "log" && e.tone === "wait") ? "checking" : "watching";
   const feedRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -292,9 +301,11 @@ function ArgusPanel({ session, events, stopped }: { session: string; events: Dem
         </div>
       )}
 
+      {!incoming && <PhoneHandoff session={session} joined={phoneJoined} />}
+
       {incoming && (
         <div className="mt-4">
-          <IncomingCall session={session} amount={incoming.amount} reason={incoming.reason} timeoutSecs={incoming.timeoutSecs} startedAt={incoming.t} decided={decided} />
+          <IncomingCall session={session} amount={incoming.amount} reason={incoming.reason} timeoutSecs={incoming.timeoutSecs} startedAt={incoming.t} decided={decided} remote={remote} />
         </div>
       )}
 
@@ -316,6 +327,35 @@ function ArgusPanel({ session, events, stopped }: { session: string; events: Dem
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/** Scan to make your own phone the owner's phone: Argus rings it for real. */
+function PhoneHandoff({ session, joined }: { session: string; joined: boolean }) {
+  const url = `${window.location.origin}/demo/phone/${session}`;
+  if (joined)
+    return (
+      <div className="enter mt-5 flex items-center gap-3 rounded-2xl bg-safe-bg px-4 py-3 text-[14px] text-safe-soft">
+        <Icon name="phone" size={16} />
+        <span className="flex-1">Your phone is the owner's phone now. Argus will ring it.</span>
+        <Icon name="check" size={16} />
+      </div>
+    );
+  return (
+    <div className="enter mt-5 flex items-center gap-5 rounded-2xl border border-line bg-panel/60 p-4">
+      <div className="hidden shrink-0 rounded-xl bg-white p-1.5 ring-1 ring-line sm:block">
+        <QrCode value={url} size={116} />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[15px] font-semibold">Make Argus call your phone</div>
+        <p className="mt-1 text-[13.5px] leading-relaxed text-muted">
+          <span className="hidden sm:inline">Scan this with your phone's camera. </span>When you try the heist, your phone rings and you talk to Argus for real. Or skip it and take the call on this screen.
+        </p>
+        <a href={url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[13px] text-muted underline-offset-4 hover:text-fg hover:underline sm:hidden">
+          Open the owner's phone in a new tab
+        </a>
+      </div>
     </div>
   );
 }

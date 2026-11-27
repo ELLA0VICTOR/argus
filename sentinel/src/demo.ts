@@ -49,6 +49,7 @@ export type DemoEvent = { t: number } & (
   | { type: "incoming"; amount: string; reason: string; timeoutSecs: number }
   | { type: "decision"; decision: "cancel" | "allow" | "timeout"; via: "voice" | "button" | "timeout" }
   | { type: "state"; vault: string; thief: string; frozen: boolean; pending: number }
+  | { type: "phone"; status: "ready" }
 );
 
 type Listener = (e: DemoEvent) => void;
@@ -71,6 +72,10 @@ interface Session {
   decide?: (d: "cancel" | "allow") => void;
   /** Call context for the voice agent (amount, reason). */
   callContext?: { amount: string; reason: string };
+  /** A phone has joined as the owner's device (QR handoff). */
+  phoneReady?: boolean;
+  /** Call progress lines relayed from the device on the call (capped). */
+  callLines: number;
 }
 
 const sessions = new Map<string, Session>();
@@ -163,6 +168,7 @@ export async function createSession(ip: string) {
     createdAt: now,
     ip,
     events: [],
+    callLines: 0,
     listeners: new Set(),
     pending: new Map(),
     handled: new Set(),
@@ -380,6 +386,40 @@ export function decide(id: string, decision: "cancel" | "allow", via: "voice" | 
   if (!s.decide) throw new DemoError(409, "There's no call waiting for an answer.");
   emit(s, { type: "decision", decision, via });
   s.decide(decision);
+  return { ok: true };
+}
+
+/** A phone scanned the QR code and is standing by as the owner's phone. */
+export function phoneReady(id: string) {
+  const s = sessions.get(id);
+  if (!s) throw new DemoError(404, "This demo has expired. Start a new one.");
+  if (!s.phoneReady) {
+    s.phoneReady = true;
+    emit(s, { type: "phone", status: "ready" });
+    emit(s, { type: "log", text: "The owner's phone is connected. Argus will ring it." });
+  }
+  return { ok: true };
+}
+
+const MAX_CALL_LINES = 80;
+const MAX_LINE = 400;
+
+/**
+ * Relays the call from the device that answered it (status and transcript),
+ * so the other screen can follow along. Display only: it changes nothing
+ * on-chain, and the decision still goes through `decide`.
+ */
+export function relayCall(id: string, body: Record<string, unknown>) {
+  const s = sessions.get(id);
+  if (!s) throw new DemoError(404, "This demo has expired. Start a new one.");
+  if (!s.callContext) throw new DemoError(409, "There's no call on this demo yet.");
+  if (s.callLines >= MAX_CALL_LINES) throw new DemoError(429, "That's enough for one call.");
+  const status = body.status === "connected" || body.status === "ended" ? body.status : undefined;
+  const who = body.who === "argus" ? "argus" : "owner";
+  const text = typeof body.text === "string" ? body.text.slice(0, MAX_LINE) : "";
+  if (!status && !text) throw new DemoError(400, "Send a status or a line of text.");
+  s.callLines++;
+  emit(s, { type: "call", who, text, ...(status ? { status } : {}) });
   return { ok: true };
 }
 

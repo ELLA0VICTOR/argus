@@ -3,7 +3,7 @@
 // The full client API is specified in docs/SENTINEL-API.md.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { PROGRAM_ID } from "./chain.ts";
-import { createSession, decide, DemoError, demoPublic, ensureMint, prepareAttack, startWatcher, submitAttack, subscribe, type AttackKind } from "./demo.ts";
+import { createSession, decide, DemoError, demoPublic, ensureMint, phoneReady, prepareAttack, relayCall, startWatcher, submitAttack, subscribe, type AttackKind } from "./demo.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
@@ -90,6 +90,14 @@ const server = createServer(async (req, res) => {
         const d = body.decision === "allow" ? "allow" : body.decision === "cancel" ? "cancel" : null;
         if (!d) throw new DemoError(400, "decision must be cancel or allow");
         return json(res, 200, decide(id, d, body.via === "voice" ? "voice" : "button"));
+      }
+      // POST /v1/demo/:id/phone   (a phone joined as the owner's device)
+      if (req.method === "POST" && parts[3] === "phone" && parts.length === 4) {
+        return json(res, 200, phoneReady(id));
+      }
+      // POST /v1/demo/:id/call    { status?: "connected" | "ended", who?: "argus" | "owner", text? }
+      if (req.method === "POST" && parts[3] === "call" && parts.length === 4) {
+        return json(res, 200, relayCall(id, await readJson(req)));
       }
       // POST /v1/demo/:id/attack                 { kind }
       // POST /v1/demo/:id/attack/:nonce          { signature }

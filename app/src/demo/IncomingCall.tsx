@@ -2,15 +2,22 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Conversation } from "@elevenlabs/client";
 import { Logo } from "../components/Logo";
 import { ELEVENLABS_AGENT_ID } from "../lib/config";
-import { decide } from "../lib/sentinel";
+import { decide, relayCall } from "../lib/sentinel";
 
 /**
  * Argus calls the owner, shown as a phone ringing. The visitor switches roles:
  * now they're the real owner. Accepting opens a live voice conversation with the
  * Argus agent (ElevenLabs), whose cancel_withdrawal tool reports back to
  * Sentinel, which cancels and freezes on-chain.
+ *
+ * Three ways to show it:
+ *  - default: a phone mock-up on the demo page, answered right there;
+ *  - `device`: full screen on the visitor's real phone (QR handoff), which
+ *    relays the call's progress to Sentinel;
+ *  - `remote`: the mock-up on the laptop mirrors a call taking place on the phone.
  */
-type Line = { who: "argus" | "you"; text: string };
+export type Line = { who: "argus" | "you"; text: string };
+export type RemoteCall = { status: "ringing" | "connected" | "ended"; lines: Line[] };
 type Phase = "ringing" | "connecting" | "live" | "ended";
 
 export function IncomingCall({
@@ -20,6 +27,9 @@ export function IncomingCall({
   timeoutSecs,
   startedAt,
   decided,
+  device = false,
+  remote = null,
+  onAnswered,
 }: {
   session: string;
   amount: string;
@@ -27,9 +37,13 @@ export function IncomingCall({
   timeoutSecs: number;
   startedAt: number;
   decided: "cancel" | "allow" | "timeout" | null;
+  device?: boolean;
+  remote?: RemoteCall | null;
+  /** Called when the owner accepts or declines (stops the ringtone). */
+  onAnswered?: () => void;
 }) {
-  const [phase, setPhase] = useState<Phase>("ringing");
-  const [lines, setLines] = useState<Line[]>([]);
+  const [localPhase, setPhase] = useState<Phase>("ringing");
+  const [localLines, setLines] = useState<Line[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [muted, setMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +52,16 @@ export function IncomingCall({
   const [endedAt, setEndedAt] = useState<number | null>(null);
   const conv = useRef<Conversation | null>(null);
   const captions = useRef<HTMLDivElement>(null);
+
+  // Mirroring a call on the phone: phase and transcript come from Sentinel.
+  const remotePhase: Phase = remote ? (remote.status === "connected" ? "live" : remote.status === "ended" || (decided && remote.status === "ringing") ? "ended" : "ringing") : "ringing";
+  const phase = remote ? remotePhase : localPhase;
+  const lines = remote ? remote.lines : localLines;
+  useEffect(() => {
+    if (!remote) return;
+    if (remote.status === "connected") setConnectedAt((t) => t ?? Date.now());
+    if (remotePhase === "ended") setEndedAt((t) => t ?? Date.now());
+  }, [remote?.status, remotePhase]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 500);
@@ -67,6 +91,7 @@ export function IncomingCall({
   const time = new Date(now).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   const accept = async () => {
+    onAnswered?.();
     setPhase("connecting");
     setError(null);
     try {
@@ -95,10 +120,17 @@ export function IncomingCall({
         onConnect: () => {
           setPhase("live");
           setConnectedAt(Date.now());
+          if (device) relayCall(session, { status: "connected" });
         },
-        onDisconnect: end,
+        onDisconnect: () => {
+          end();
+          if (device) relayCall(session, { status: "ended" });
+        },
         onModeChange: ({ mode }) => setSpeaking(mode === "speaking"),
-        onMessage: ({ message, source }) => setLines((xs) => [...xs, { who: source === "ai" ? "argus" : "you", text: message }]),
+        onMessage: ({ message, source }) => {
+          setLines((xs) => [...xs, { who: source === "ai" ? "argus" : "you", text: message }]);
+          if (device) relayCall(session, { who: source === "ai" ? "argus" : "owner", text: message });
+        },
         onError: (m) => setError(typeof m === "string" ? m : "The call dropped."),
       });
     } catch (e) {
@@ -110,6 +142,7 @@ export function IncomingCall({
 
   // Declining is a safe answer: Argus treats it like "cancel".
   const decline = async () => {
+    onAnswered?.();
     try {
       await decide(session, "cancel", "button");
     } catch (e) {
@@ -137,20 +170,16 @@ export function IncomingCall({
           ? { title: "Cancelled on-chain", body: "Argus's cancel-only key stopped the withdrawal and froze the vault." }
           : null;
 
-  return (
-    <div className="flex flex-col items-center">
-      <div className="phone relative aspect-[9/19.2] w-full max-w-[300px] rounded-[52px] bg-[#0b0b0d] p-[11px] shadow-[0_40px_80px_-30px_rgba(15,23,42,0.55),inset_0_0_0_1.5px_#2c2c31]">
-        {/* side buttons */}
-        <span className="absolute top-[22%] -left-[3px] h-14 w-[3px] rounded-l bg-[#2c2c31]" />
-        <span className="absolute top-[33%] -left-[3px] h-14 w-[3px] rounded-l bg-[#2c2c31]" />
-        <span className="absolute top-[27%] -right-[3px] h-20 w-[3px] rounded-r bg-[#2c2c31]" />
-
-        <div className="relative h-full w-full overflow-hidden rounded-[42px] text-white" style={{ fontFamily: '-apple-system, "SF Pro Text", "SF Pro Display", Inter, system-ui, sans-serif' }}>
+  const screen = (
+        <div className={`relative h-full w-full overflow-hidden text-white ${device ? "" : "rounded-[42px]"}`} style={{ fontFamily: '-apple-system, "SF Pro Text", "SF Pro Display", Inter, system-ui, sans-serif' }}>
           {/* wallpaper */}
           <div className="absolute inset-0 scale-125 bg-cover bg-center blur-2xl" style={{ backgroundImage: "url(/img/hero-dawn.webp)" }} />
           <div className={`absolute inset-0 transition-colors duration-700 ${phase === "ringing" ? "bg-[#0b1020]/45" : "bg-[#0b1020]/70"}`} />
 
-          {/* status bar + island */}
+          {/* status bar + island (a real phone has its own) */}
+          {device ? (
+            <div className="h-[max(env(safe-area-inset-top),16px)]" />
+          ) : (
           <div className="relative z-10 flex h-[46px] items-center justify-between px-7 pt-1 text-[14px] font-semibold">
             <span className="num w-12">{time}</span>
             <span className="h-[26px] w-[86px] rounded-full bg-black" />
@@ -159,11 +188,12 @@ export function IncomingCall({
               <Battery />
             </span>
           </div>
+          )}
 
-          <div className="relative z-10 flex h-[calc(100%-46px)] flex-col px-6 pb-3">
+          <div className={`relative z-10 mx-auto flex max-w-[460px] flex-col px-6 pb-3 ${device ? "h-[calc(100%-max(env(safe-area-inset-top),16px))] pb-[max(env(safe-area-inset-bottom),12px)]" : "h-[calc(100%-46px)]"}`}>
             {/* caller */}
-            <div className="mt-6 flex flex-col items-center text-center">
-              {phase === "ringing" && <div className="text-[13px] text-white/70">Incoming call · you're the owner now</div>}
+            <div className={`flex flex-col items-center text-center ${device ? "mt-[9vh]" : "mt-6"}`}>
+              {phase === "ringing" && <div className="text-[13px] text-white/70">{remote ? "Calling your phone…" : "Incoming call · you're the owner now"}</div>}
               {phase !== "ringing" && (
                 <div className="num text-[14px] text-white/70">{phase === "connecting" ? "connecting…" : phase === "live" ? clock : connectedAt ? `Call ended · ${clock}` : "Call ended"}</div>
               )}
@@ -176,7 +206,7 @@ export function IncomingCall({
               <div className="mt-4 flex h-5 items-center gap-[3px]" aria-hidden="true">
                 {phase === "live" &&
                   [0, 1, 2, 3, 4, 5, 6].map((i) => (
-                    <span key={i} className={`h-5 w-[3px] rounded-full bg-white/90 ${speaking ? "animate-wave" : "scale-y-[0.2]"}`} style={{ animationDelay: `${i * 100}ms` }} />
+                    <span key={i} className={`h-5 w-[3px] rounded-full bg-white/90 ${speaking || remote ? "animate-wave" : "scale-y-[0.2]"}`} style={{ animationDelay: `${i * 100}ms` }} />
                   ))}
               </div>
             </div>
@@ -217,14 +247,20 @@ export function IncomingCall({
 
             {/* controls */}
             <div className="mt-4 mb-4">
-              {phase === "ringing" && !decided && (
-                <div className="flex justify-between px-3">
+              {phase === "ringing" && !decided && remote && (
+                <div className="flex items-center justify-center gap-2 rounded-full bg-white/12 py-3 text-[13px] backdrop-blur-xl">
+                  <span className="size-1.5 animate-pulse-dot rounded-full bg-[#34c759]" /> Ringing on your phone. Answer it there.
+                </div>
+              )}
+              {phase === "ringing" && !decided && !remote && (
+                <div className={`flex justify-between ${device ? "px-6" : "px-3"}`}>
                   <CallButton label="Decline" tone="red" onClick={decline} />
                   <CallButton label="Accept" tone="green" onClick={accept} ring />
                 </div>
               )}
               {phase === "connecting" && <div className="text-center text-[12.5px] text-white/70">Allow the microphone if asked.</div>}
-              {phase === "live" && (
+              {phase === "live" && remote && <div className="text-center text-[12.5px] text-white/65">Live on your phone. Captions appear here as you talk.</div>}
+              {phase === "live" && !remote && (
                 <>
                   <div className="mb-4 text-center text-[12.5px] text-white/65">Try: “No, that wasn't me. Cancel it.”</div>
                   <div className="flex items-start justify-center gap-10">
@@ -234,11 +270,25 @@ export function IncomingCall({
                 </>
               )}
             </div>
-            <div className="mx-auto h-[5px] w-[120px] rounded-full bg-white/80" />
+            {!device && <div className="mx-auto h-[5px] w-[120px] rounded-full bg-white/80" />}
           </div>
         </div>
+  );
+
+  if (device) return <div className="fixed inset-0 bg-black">{screen}</div>;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="phone relative aspect-[9/19.2] w-full max-w-[300px] rounded-[52px] bg-[#0b0b0d] p-[11px] shadow-[0_40px_80px_-30px_rgba(15,23,42,0.55),inset_0_0_0_1.5px_#2c2c31]">
+        {/* side buttons */}
+        <span className="absolute top-[22%] -left-[3px] h-14 w-[3px] rounded-l bg-[#2c2c31]" />
+        <span className="absolute top-[33%] -left-[3px] h-14 w-[3px] rounded-l bg-[#2c2c31]" />
+        <span className="absolute top-[27%] -right-[3px] h-20 w-[3px] rounded-r bg-[#2c2c31]" />
+        {screen}
       </div>
-      <p className="mt-4 max-w-[300px] text-center text-[12px] leading-relaxed text-faint">A live AI voice call (ElevenLabs), right in your browser. In production, Argus rings the owner's real phone.</p>
+      <p className="mt-4 max-w-[300px] text-center text-[12px] leading-relaxed text-faint">
+        {remote ? "The call is happening on your phone: a live AI voice agent (ElevenLabs). This screen follows along." : "A live AI voice call (ElevenLabs), right in your browser. Scan the code above to take it on your phone instead."}
+      </p>
     </div>
   );
 }

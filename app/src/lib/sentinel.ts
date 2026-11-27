@@ -30,6 +30,7 @@ export type DemoEvent = { t: number } & (
   | { type: "state"; vault: string; thief: string; frozen: boolean; pending: number }
   | { type: "incoming"; amount: string; reason: string; timeoutSecs: number }
   | { type: "decision"; decision: "cancel" | "allow" | "timeout"; via: "voice" | "button" | "timeout" }
+  | { type: "phone"; status: "ready" }
 );
 
 export type AttackResult = { ok: true; sig: string } | { ok: false; error: { code: number | null; name: string; msg: string } };
@@ -63,6 +64,14 @@ export async function attack(session: DemoSession, kind: AttackKind): Promise<At
 /** The owner's answer to Argus's call: from the voice agent's tool, or a button. */
 export const decide = (session: string, decision: "cancel" | "allow", via: "voice" | "button") =>
   call<{ ok: true }>(`/v1/demo/${session}/decision`, { decision, via });
+
+/** A phone joined as the owner's device (QR handoff). */
+export const phoneReady = (session: string) => call<{ ok: true }>(`/v1/demo/${session}/phone`);
+
+/** Mirrors the call to the other screen. Best effort: display only. */
+export function relayCall(session: string, line: { status?: "connected" | "ended"; who?: "argus" | "owner"; text?: string }) {
+  call(`/v1/demo/${session}/call`, line).catch(() => {});
+}
 
 export function streamEvents(session: string, onEvent: (e: DemoEvent) => void): () => void {
   const es = new EventSource(`${SENTINEL_URL}/v1/demo/${session}/events`);
