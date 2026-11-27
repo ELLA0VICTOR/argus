@@ -2,6 +2,9 @@
 export const PROGRAM_ID = "4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh";
 export const CLUSTER = "devnet" as const;
 
+/** Solana RPC for the web app. A keyed RPC here is visible to visitors, so use a domain-restricted one. */
+export const RPC_URL: string = (import.meta.env.VITE_RPC_URL as string | undefined) ?? "https://api.devnet.solana.com";
+
 /** Set once the EAS build is published. `null` renders an honest "building" state. */
 export const APK_URL: string | null = null;
 /** Set once the Solana dApp Store listing is live. */

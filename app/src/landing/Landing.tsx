@@ -327,7 +327,7 @@ function Features() {
                 <span className="font-medium">Guardians</span>
                 <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] text-muted">2 of 3</span>
               </div>
-              {[["Ada", "Family", "#f59e0b"], ["Tunde", "Family", "#10b981"], ["Backup key", "Your Seeker", "#6366f1"]].map(([n, r, c]) => (
+              {([["Ada", "Family", "#f59e0b", true], ["Tunde", "Family", "#10b981", true], ["Backup key", "Your Seeker", "#6366f1", false]] as [string, string, string, boolean][]).map(([n, r, c, signed]) => (
                 <div key={n} className="mt-3 flex items-center gap-2.5">
                   <span className="grid size-7 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: c }}>
                     {n[0]}
@@ -336,7 +336,13 @@ function Features() {
                     <div className="text-[12.5px] font-medium">{n}</div>
                     <div className="text-[10.5px] text-muted">{r}</div>
                   </div>
-                  <Icon name="shield" size={14} className="text-faint" />
+                  {signed ? (
+                    <span className="grid size-[18px] place-items-center rounded-full bg-fg text-white" title="Approved">
+                      <Icon name="check" size={11} strokeWidth={2.6} />
+                    </span>
+                  ) : (
+                    <span className="size-[18px] rounded-full border-[1.5px] border-dashed border-line-strong" title="Waiting" />
+                  )}
                 </div>
               ))}
             </div>
@@ -544,10 +550,10 @@ function Closing() {
       <div className="relative mx-auto max-w-[920px] px-5 pt-28 pb-16 sm:px-8">
         {/* floating glass tiles */}
         <GlassTile className="top-14 right-[8%] hidden sm:grid" rotate={-8} delay={0}>
-          <Icon name="eye" size={34} strokeWidth={1.6} />
+          <Logo size={40} />
         </GlassTile>
         <GlassTile className="top-[190px] right-[30%] hidden sm:grid" rotate={10} delay={1200} glow>
-          <Icon name="shield" size={34} strokeWidth={1.6} />
+          <DelayRing />
         </GlassTile>
 
         <div className="reveal max-w-[34rem]">
@@ -595,6 +601,21 @@ function Closing() {
         </div>
       </div>
     </footer>
+  );
+}
+
+/** The 24-hour delay as a ring: most of the wait still ahead, time running. */
+function DelayRing() {
+  const r = 30;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className="relative grid place-items-center">
+      <svg width="76" height="76" viewBox="0 0 76 76" className="-rotate-90">
+        <circle cx="38" cy="38" r={r} fill="none" stroke="currentColor" strokeOpacity="0.18" strokeWidth="5" />
+        <circle cx="38" cy="38" r={r} fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * 0.28} />
+      </svg>
+      <span className="num absolute text-[13px] font-semibold tracking-[-0.02em] text-[#2f5fd0]">23:41</span>
+    </span>
   );
 }
 

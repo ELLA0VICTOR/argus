@@ -1,8 +1,10 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Link, NavLink, useLocation } from "react-router";
 import { Wordmark } from "../components/Logo";
 import { Icon, type IconName } from "../components/Icon";
-import { explorerTx, shortAddr } from "../lib/format";
+import { explorerAddr, explorerTx, shortAddr } from "../lib/format";
+import { useConnectModal, useSolBalance } from "./wallet";
 import { useVault } from "./store";
 
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
@@ -55,18 +57,102 @@ function Sidebar() {
   );
 }
 
-/** Connected wallet. Becomes the Solana wallet-connect button. */
+/** The connected wallet, or the button to connect one. */
 function Account() {
-  const { me, role } = useVault();
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand" aria-hidden="true"><Icon name="wallet" size={16} /></span>
-      <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] font-medium">{role === "owner" ? "Owner" : "Guardian"}</div>
-        <div className="font-mono text-[11.5px] text-muted">{shortAddr(me)}</div>
+  const { publicKey, connecting } = useWallet();
+  const { open } = useConnectModal();
+  const [menu, setMenu] = useState(false);
+  if (!publicKey)
+    return (
+      <div className="rounded-2xl border border-line bg-canvas p-3">
+        <button type="button" onClick={open} className="press btn-brand flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-medium text-white">
+          <Icon name="wallet" size={16} /> {connecting ? "Connecting…" : "Connect wallet"}
+        </button>
+        <div className="mt-2.5 flex justify-center">
+          <Network />
+        </div>
       </div>
-      <Network />
+    );
+  return (
+    <div className="relative">
+      {menu && <AccountMenu onClose={() => setMenu(false)} className="bottom-full mb-2 left-0 right-0" />}
+      <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3 text-left transition-colors hover:border-line-strong">
+        <WalletAvatar />
+        <AccountLines />
+        <Icon name="chevron-down" size={15} className={`text-muted transition-transform ${menu ? "rotate-180" : ""}`} />
+      </button>
     </div>
+  );
+}
+
+function WalletAvatar({ size = 36 }: { size?: number }) {
+  const { wallet } = useWallet();
+  return wallet ? (
+    <img src={wallet.adapter.icon} alt="" style={{ width: size, height: size }} className="shrink-0 rounded-full bg-white ring-1 ring-line" />
+  ) : (
+    <span style={{ width: size, height: size }} className="grid shrink-0 place-items-center rounded-full bg-brand-soft text-brand">
+      <Icon name="wallet" size={16} />
+    </span>
+  );
+}
+
+function AccountLines() {
+  const { publicKey } = useWallet();
+  const sol = useSolBalance();
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="font-mono text-[12.5px] font-medium">{publicKey ? shortAddr(publicKey.toBase58()) : ""}</div>
+      <div className="num text-[11.5px] text-muted">{sol === null ? "…" : `${sol.toLocaleString("en-US", { maximumFractionDigits: 3 })} SOL`} · Devnet</div>
+    </div>
+  );
+}
+
+function AccountMenu({ onClose, className = "" }: { onClose: () => void; className?: string }) {
+  const { publicKey, disconnect } = useWallet();
+  const sol = useSolBalance();
+  const [copied, setCopied] = useState(false);
+  if (!publicKey) return null;
+  const addr = publicKey.toBase58();
+  const item = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] hover:bg-panel";
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden="true" />
+      <div className={`enter absolute z-50 rounded-2xl border border-line bg-white p-1.5 shadow-[0_24px_60px_-24px_rgba(23,37,84,0.4)] ${className}`} role="menu">
+        <button
+          type="button"
+          role="menuitem"
+          className={item}
+          onClick={() =>
+            navigator.clipboard?.writeText(addr).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1300);
+            })
+          }
+        >
+          <Icon name={copied ? "check" : "copy"} size={15} className={copied ? "text-safe" : "text-muted"} /> {copied ? "Copied" : "Copy address"}
+        </button>
+        <a role="menuitem" className={item} href={explorerAddr(addr)} target="_blank" rel="noreferrer">
+          <Icon name="arrow-up-right" size={15} className="text-muted" /> View on Solana Explorer
+        </a>
+        {sol !== null && sol < 0.05 && (
+          <a role="menuitem" className={item} href="https://faucet.solana.com" target="_blank" rel="noreferrer">
+            <Icon name="plus" size={15} className="text-muted" /> Get devnet SOL for fees
+          </a>
+        )}
+        <div className="my-1 h-px bg-line-soft" />
+        <button
+          type="button"
+          role="menuitem"
+          className={item}
+          onClick={() => {
+            onClose();
+            void disconnect();
+          }}
+        >
+          <Icon name="close" size={15} className="text-muted" /> Disconnect
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -79,12 +165,27 @@ function Network() {
 }
 
 function MobileTop() {
+  const { publicKey, connecting } = useWallet();
+  const { open } = useConnectModal();
+  const [menu, setMenu] = useState(false);
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur-md lg:hidden">
       <Link to="/" className="text-fg" aria-label="Argus home">
         <Wordmark size={22} />
       </Link>
-      <Network />
+      {publicKey ? (
+        <div className="relative">
+          <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex h-9 items-center gap-2 rounded-full border border-line bg-white py-1 pr-3 pl-1">
+            <WalletAvatar size={26} />
+            <span className="font-mono text-[12px]">{shortAddr(publicKey.toBase58())}</span>
+          </button>
+          {menu && <AccountMenu onClose={() => setMenu(false)} className="top-full right-0 mt-2 w-[240px]" />}
+        </div>
+      ) : (
+        <button type="button" onClick={open} className="press btn-brand inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-white">
+          <Icon name="wallet" size={14} /> {connecting ? "Connecting…" : "Connect"}
+        </button>
+      )}
     </header>
   );
 }

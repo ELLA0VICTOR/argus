@@ -1,7 +1,9 @@
+import "../lib/polyfills";
 import { useEffect } from "react";
 import { Route, Routes, useLocation } from "react-router";
 import { Shell } from "./Shell";
 import { VaultProvider } from "./store";
+import { WalletProviders } from "./wallet";
 import Overview from "./pages/Overview";
 import Activity from "./pages/Activity";
 import Send from "./pages/Send";
@@ -26,6 +28,7 @@ function TitleSync() {
 
 export default function AppRoot() {
   return (
+    <WalletProviders>
     <VaultProvider>
       <TitleSync />
       <Shell>
@@ -39,5 +42,6 @@ export default function AppRoot() {
         </Routes>
       </Shell>
     </VaultProvider>
+    </WalletProviders>
   );
 }
