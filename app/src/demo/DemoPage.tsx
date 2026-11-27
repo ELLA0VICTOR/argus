@@ -76,9 +76,6 @@ export default function DemoPage() {
         <Link to="/" aria-label="Argus home">
           <Wordmark size={24} />
         </Link>
-        <span className="hidden items-center gap-2 rounded-full border border-line bg-panel px-3 py-1 text-[12.5px] text-muted sm:inline-flex">
-          <span className="size-1.5 animate-pulse-dot rounded-full bg-safe" /> Live on Solana devnet. Every move is a real transaction
-        </span>
         <Link to="/app" className="text-[14px] font-medium text-muted hover:text-fg">
           Open app
         </Link>
