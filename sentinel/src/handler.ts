@@ -2,8 +2,8 @@
 // Vercel function (vercel.ts). v1 routes in this build: health and the
 // "steal my wallet" demo. The full client API is in docs/SENTINEL-API.md.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { PROGRAM_ID } from "./chain.ts";
-import { checkDb } from "./db.ts";
+import { PROGRAM_ID, connection } from "./chain.ts";
+import { checkDb, describeError } from "./db.ts";
 import { createSession, decide, DemoError, demoPublic, eventsAfter, load, phoneReady, prepareAttack, relayCall, submitAttack, tick, type AttackKind } from "./demo.ts";
 
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
@@ -117,8 +117,14 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
       const base = { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, version: "0.1.0" };
       // ?deep=1 also checks the database (host only, never credentials).
       if (url.searchParams.get("deep") === "1") {
-        const db = await checkDb();
-        return json(res, db.ok ? 200 : 503, { ...base, ok: db.ok, db });
+        const [db, rpc] = await Promise.all([
+          checkDb(),
+          connection.getVersion().then(
+            () => ({ ok: true }),
+            (e) => ({ ok: false, error: describeError(e) }),
+          ),
+        ]);
+        return json(res, db.ok && rpc.ok ? 200 : 503, { ...base, ok: db.ok && rpc.ok, db, rpc });
       }
       return json(res, 200, base);
     }

@@ -32,16 +32,29 @@ export const dbHost = (() => {
 
 export const sql = neon(DB_URL);
 
+/**
+ * Walks an error's cause chain (the Neon driver wraps fetch errors in
+ * `sourceError`, and fetch puts the network reason in `cause`) and returns a
+ * short summary, with anything that looks like a connection string removed.
+ */
+export function describeError(e: unknown): string {
+  const parts: string[] = [];
+  let cur: any = e;
+  for (let depth = 0; cur && depth < 5; depth++) {
+    const bits = [cur.name, cur.code, cur.errno, cur.syscall, cur.hostname, cur.message].filter((x) => x !== undefined && x !== "");
+    if (bits.length) parts.push(bits.join(" "));
+    cur = cur.sourceError ?? cur.cause;
+  }
+  return parts.join(" <- ").replace(/postgres(ql)?:\/\/\S+/g, "<url>").slice(0, 400);
+}
+
 /** For /v1/health?deep=1: can we reach the database? */
 export async function checkDb(): Promise<{ ok: boolean; host: string; error?: string }> {
   try {
     await sql`select 1`;
     return { ok: true, host: dbHost };
   } catch (e) {
-    const err = e as Error & { cause?: { code?: string; message?: string } };
-    const why = err.cause?.code ?? err.cause?.message ?? err.message;
-    // Strip anything that looks like a connection string before returning it.
-    return { ok: false, host: dbHost, error: String(why).replace(/postgres(ql)?:\/\/\S+/g, "<url>").slice(0, 200) };
+    return { ok: false, host: dbHost, error: describeError(e) };
   }
 }
 
