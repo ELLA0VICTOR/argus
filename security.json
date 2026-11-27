@@ -1,0 +1,22 @@
+{
+  "name": "Argus",
+  "logo": "",
+  "description": "Self-custodial Solana savings vault with a cancellable withdrawal delay, M-of-N guardians and a cancel/freeze-only AI guardian. Devnet only.",
+  "notification": "Devnet only. Not audited by a third party. Do not publish this metadata on-chain until a security contact is agreed.",
+  "sdk": "",
+  "project_url": "https://github.com/ELLA0VICTOR/argus",
+  "contacts": [
+    "link:https://github.com/ELLA0VICTOR/argus/issues"
+  ],
+  "policy": "https://github.com/ELLA0VICTOR/argus/blob/master/docs/THREAT-MODEL.md",
+  "preferred_languages": [
+    "en"
+  ],
+  "encryption": "",
+  "source_code": "https://github.com/ELLA0VICTOR/argus",
+  "source_release": "",
+  "source_revision": "",
+  "auditors": [],
+  "acknowledgements": "Internal audits only: docs/audits/ (two independent internal reviewers). No third-party audit.",
+  "version": "0.1.0"
+}

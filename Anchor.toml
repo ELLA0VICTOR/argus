@@ -1,0 +1,25 @@
+skip_local_validator = true
+
+[toolchain]
+# Pinned per PROGRAM-SPEC §1. Rust itself is pinned in rust-toolchain.toml (1.89.0).
+anchor_version = "1.2.2"
+solana_version = "4.4.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+argus = "4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh"
+
+[programs.devnet]
+argus = "4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "cargo test"
+
+[hooks]
