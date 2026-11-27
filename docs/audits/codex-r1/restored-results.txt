@@ -1,0 +1,213 @@
+Cached SBF SHA256: 18b04a6356fb2bda24e9765649ab9f9221a903dab9003d79ae98fc9ef1c9bece
+Binary SHA256: 9ce0e33690521eaeed00fbf446909c9a9526c04ac18879afe75ee91248e06679
+$ /home/kolev/argus-target/debug/deps/argus-dcf8435a277033ac --test-threads=1 --skip __anchor_private
+
+running 5 tests
+test governance::tests::timelocks_match_spec_table ... ok
+test state::tests::guardian_index_finds_every_active_slot ... ok
+test state::tests::guardian_index_ignores_unused_default_slots ... ok
+test state::tests::is_ai_false_for_default_when_ai_disabled ... ok
+test state::tests::is_owner_matches_only_owner ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+Binary SHA256: fe2b24a2fa1e8572fc584cb5c3c661b553ca54d3cf80bf22ed55d78e975f8335
+$ /home/kolev/argus-target/debug/deps/initialize_vault-2c331918069b300c --test-threads=1 --skip __anchor_private
+
+running 31 tests
+test init_allows_safe_address_that_is_another_pda ... ok
+test init_delay_bounds_are_inclusive ... ok
+test init_family_2_of_3_and_company_3_of_5 ... ok
+test init_happy_path_sets_every_field ... ok
+test init_rejects_ai_as_guardian ... ok
+test init_rejects_ai_equal_to_owner ... ok
+test init_rejects_classic_mint_with_token_2022_program ... ok
+test init_rejects_default_pubkey_guardian ... ok
+test init_rejects_default_safe_address ... ok
+test init_rejects_delay_above_max ... ok
+test init_rejects_delay_below_min ... ok
+test init_rejects_duplicate_guardian ... ok
+test init_rejects_negative_delay ... ok
+test init_rejects_non_ata_vault_token_account ... ok
+test init_rejects_owner_as_guardian ... ok
+test init_rejects_safe_address_equal_to_ai ... ok
+test init_rejects_safe_address_equal_to_owner ... ok
+test init_rejects_safe_address_equal_to_vault ... ok
+test init_rejects_six_guardians ... ok
+test init_rejects_threshold_above_guardian_count ... ok
+test init_rejects_token_2022_mint_with_classic_program ... ok
+test init_rejects_token_2022_mint_with_token_2022_program ... ok
+test init_rejects_vault_pda_of_another_creator ... ok
+test init_rejects_zero_guardians ... ok
+test init_rejects_zero_threshold ... ok
+test init_requires_creator_signature ... ok
+test init_safe_address_may_be_a_guardian_wallet ... ok
+test init_same_creator_many_vaults_by_id ... ok
+test init_same_vault_id_twice_fails ... ok
+test init_succeeds_when_ata_precreated_and_funded_by_third_party ... ok
+test init_without_ai_guardian_is_allowed ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.72s
+
+
+Binary SHA256: bb15e930945c1d6862b61a5efbd9fd25d14b2dc80cca6b1235d868636dba3619
+$ /home/kolev/argus-target/debug/deps/deposit-fbd8fa8e64235e10 --test-threads=1 --skip __anchor_private
+
+running 5 tests
+test deposit_allowed_while_frozen ... ok
+test deposit_by_anyone_moves_tokens_into_vault ... ok
+test deposit_cannot_spend_someone_elses_tokens ... ok
+test deposit_rejects_source_of_another_mint ... ok
+test deposit_rejects_zero ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.26s
+
+
+Binary SHA256: d9a37a45c940b38d0e0bfa3e4323d4ae102770a53fd07a8bf1efccfd0083dcfc
+$ /home/kolev/argus-target/debug/deps/withdraw_instant-7a8559603cf36152 --test-threads=1 --skip __anchor_private
+
+running 9 tests
+test attack_instant_capped ... ok
+test attack_window_rollover ... ok
+test instant_rejects_destination_of_another_mint ... ok
+test instant_rejects_guardian_ai_and_stranger ... ok
+test instant_rejects_vault_ata_as_destination ... ok
+test instant_rejects_when_frozen ... ok
+test instant_rejects_zero_and_overdraw ... ok
+test instant_spend_overflow_is_rejected ... ok
+test instant_within_limit_moves_funds_and_tracks_spend ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.34s
+
+
+Binary SHA256: 894d38a727c6c3062e5c9de007afa8b43d8bd9bcf6d90bfea85f5de4ce504357
+$ /home/kolev/argus-target/debug/deps/withdraw_trusted-9f256833f3a9f77e --test-threads=1 --skip __anchor_private
+
+running 12 tests
+test trusted_record_of_other_vault_is_rejected ... ok
+test trusted_record_of_other_wallet_is_rejected ... ok
+test trusted_rejects_canonical_pda_with_foreign_owner ... ok
+test trusted_rejects_canonical_pda_with_mismatched_vault_field ... ok
+test trusted_rejects_canonical_pda_with_mismatched_wallet_field ... ok
+test trusted_rejects_canonical_pda_with_truncated_data ... ok
+test trusted_rejects_non_owner_and_frozen ... ok
+test trusted_rejects_overdraw ... ok
+test trusted_rejects_until_active_at ... ok
+test trusted_rejects_untrusted_destination ... ok
+test trusted_rejects_wrong_account_type_at_trusted_address ... ok
+test trusted_send_goes_to_owner_address ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.44s
+
+
+Binary SHA256: 34720a58d2c5959e5d2d6c0fd6cb25a5d63869cf3d479fa1e246fa5ad9adfa44
+$ /home/kolev/argus-target/debug/deps/withdrawals-03d78d1b18a622f9 --test-threads=1 --skip __anchor_private
+
+running 14 tests
+test attack_owner_request_waits_full_delay ... ok
+test execute_after_delay_by_any_cranker_and_refunds_rent ... ok
+test execute_one_second_early_fails ... ok
+test execute_rechecks_balance_and_stays_pending ... ok
+test execute_rejects_stale_owner_epoch ... ok
+test execute_rejects_substituted_destination ... ok
+test execute_rejects_substituted_rent_payer ... ok
+test execute_rejects_withdrawal_of_another_vault ... ok
+test execute_twice_fails ... ok
+test frozen_blocks_request_and_execute ... ok
+test request_creates_pending_withdrawal ... ok
+test request_rejects_guardian_ai_and_stranger ... ok
+test request_rejects_zero_overdraw_bad_mint_and_vault_ata ... ok
+test withdrawal_ids_never_reused ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.30s
+
+
+Binary SHA256: eff3fa03d833405ddae5259e7bb2eb6e7b2c8f9aca127aff1659456863803213
+$ /home/kolev/argus-target/debug/deps/protective-ae186e4cc4160b63 --test-threads=1 --skip __anchor_private
+
+running 23 tests
+test attack_owner_request_then_cancel ... ok
+test cancel_allowed_while_frozen ... ok
+test cancel_by_every_guardian ... ok
+test cancel_by_owner_refunds_rent_to_rent_payer ... ok
+test cancel_rejects_stranger_and_safe_wallet ... ok
+test cancel_rejects_substituted_rent_payer ... ok
+test cancel_rejects_withdrawal_of_another_vault ... ok
+test cancel_twice_fails ... ok
+test freeze_by_owner_guardian_or_ai ... ok
+test freeze_is_idempotent ... ok
+test freeze_rejects_stranger ... ok
+test frozen_blocks_all_outflows_except_sweep ... ok
+test inv1_balances_conserved_across_all_paths ... ok
+test owner_can_execute_own_withdrawal ... ok
+test sweep_moves_everything_to_safe_and_freezes ... ok
+test sweep_never_unfreezes ... ok
+test sweep_of_empty_vault_fails ... ok
+test sweep_rejects_owner_ai_and_stranger ... ok
+test sweep_rejects_substituted_safe_token_account ... ok
+test sweep_rejects_substituted_safe_wallet ... ok
+test sweep_when_safe_address_is_the_sweeping_guardian ... ok
+test sweep_without_freeze_leaves_vault_unfrozen ... ok
+test sweep_works_when_safe_ata_already_exists ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.64s
+
+
+Binary SHA256: 93cfab2ab1fc9b1b54003a0c205e88026c69df6302dfdcb20b9ea7777a409566
+$ /home/kolev/argus-target/debug/deps/governance-a9ddbaeadd2a96d2 --test-threads=1 --skip __anchor_private
+
+running 40 tests
+test actions_revalidated_at_execute ... ok
+test add_trusted_capped_at_max ... ok
+test add_trusted_end_to_end_then_remove ... ok
+test add_trusted_rejects_owner_ai_default_and_vault ... ok
+test add_trusted_succeeds_when_pda_prefunded_by_griefer ... ok
+test add_trusted_twice_fails_already_trusted ... ok
+test add_trusted_vetoed_by_single_guardian ... ok
+test ai_cannot_propose_approve_or_veto ... ok
+test approve_twice_is_rejected_never_double_counted ... ok
+test attack_owner_cannot_add_trusted ... ok
+test attack_owner_cannot_loosen ... ok
+test attack_owner_cannot_rotate ... ok
+test attack_owner_cannot_set_guardians ... ok
+test attack_owner_cannot_unfreeze ... ok
+test attack_request_voided_by_rotation ... ok
+test attack_rogue_guardian_cannot_block_removal ... ok
+test attack_spam_requests_voided ... ok
+test eta_set_once_and_never_moves ... ok
+test execute_rejects_wrong_trusted_account ... ok
+test governance_allowed_while_frozen ... ok
+test kept_guardian_can_veto_set_guardians ... ok
+test loosen_delay_does_not_shorten_pending_withdrawal ... ok
+test loosen_limits_is_delayed_and_vetoable ... ok
+test non_guardian_cannot_approve_or_veto ... ok
+test one_of_one_propose_sets_eta_immediately ... ok
+test owner_freeze_needs_threshold_unfreeze ... ok
+test proposal_executes_once_and_ids_increment ... ok
+test proposer_can_execute_own_proposal ... ok
+test remove_ai_is_immediate_and_revokes_it ... ok
+test remove_trusted_of_unknown_wallet_fails ... ok
+test rotate_owner_rejects_role_overlap ... ok
+test rotate_owner_rejects_trusted_wallet ... ok
+test set_ai_rejects_trusted_wallet ... ok
+test set_guardians_kills_old_proposals_and_removed_guardians ... ok
+test set_guardians_validated_like_init ... ok
+test set_guardians_with_five_guardians_fits ... ok
+test set_new_ai_is_delayed_and_validated ... ok
+test set_safe_address_delayed_and_validated ... ok
+test tighten_is_not_vetoable ... ok
+test tighten_limits_is_immediate_and_stricter_only ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.32s
+
+
+Binary SHA256: 2464c4f6a5c48ab45816a368214d696db81ab4df7795a09886880214e35dfc53
+$ /home/kolev/argus-target/debug/deps/rollback-cb0c336620ca89a1 --test-threads=1 --skip __anchor_private
+
+running 2 tests
+test execute_cpi_failure_keeps_withdrawal_pending_and_rent_in_place ... ok
+test instant_cpi_failure_rolls_back_window_and_spend ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.47s
+

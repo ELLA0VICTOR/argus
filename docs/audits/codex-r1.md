@@ -1,0 +1,108 @@
+# Codex independent audit — round 1
+
+Date: 2026-11-26 (Africa/Lagos). Program: `4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`; deployment not announced.
+
+## Scope and independence
+
+Reviewed every program source file, all instruction tests and the shared LiteSVM harness against `PROGRAM-SPEC.md`, `THREAT-MODEL.md` and all 40 checklist items. Initial source/document/IDL SHA-256 hashes are in `codex-r1-manifest.json`. No Claude audit file was opened. This is the independent audit round requested after the earlier targeted code reviews.
+
+The working directory and build cache were being changed concurrently. Normal source/test reading exposed inline references to another audit's F-1/F-2 fixes in `execute_proposal.rs` and `tests/governance.rs`; the executor/rent-payer alias fix and AI/trusted-role fix were already present in the hashed baseline. They are verified baseline fixes, **not claimed as independent discoveries** here. The missing TrustedAddress IDL schema was disclosed by the task and is also not a new discovery. It was corrected upstream during this round; the final mobile client uses the corrected generated JSON/TS. `codex-r1-manifest-final.json` records the final IDL and the added fuzz test; all original program source hashes match the initial manifest again.
+
+Source review found no additional path to transfer vault SPL tokens outside the four authorized routes, and no owner-only route to change configuration without existing guardian authorization, in the hashed baseline. This is a scoped review, not a claim that all attacks are excluded. One low-severity lifecycle finding remains below. Off-chain server/deployment checks remain incomplete.
+
+## R1-L1 — stale immediate proposals permanently retain rent
+
+**Severity: Low.** Locations: `programs/argus/src/instructions/approve.rs:33`, `instructions/execute_proposal.rs:65`, `instructions/execute_proposal.rs:171`, `instructions/veto.rs:45`, and `programs/argus/src/governance.rs:52`.
+
+**Scenario:** a guardian proposes an immediate action such as Unfreeze, RotateOwner, TightenLimits, RemoveTrusted or removal of the AI. Before it executes, another proposal changes the guardian set or threshold. The old proposal's epoch is now stale: it can neither receive approvals nor execute. It cannot be vetoed either, because its action is not vetoable. There is no separate stale-proposal close path. Even the original rent payer and the entire new guardian set cannot recover that account's rent. Repeated legitimate recovery/configuration activity can accumulate permanently stranded Proposal accounts. A guardian only locks rent that they chose to fund; this does not authorize theft of vault tokens or bypass INV-2.
+
+**Suggested fix:** add a cleanup path restricted to provably stale proposals, with seeds, vault binding and stored rent-payer binding checked, and refund only that stored payer. Alternatively permit stale-epoch cleanup in veto before applying live-proposal veto restrictions. Keep live immediate actions non-vetoable and never allow stale execution/approval. This changes the instruction contract and belongs to Claude/Victor, so no program edit was made.
+
+**Regression (passed):** `codex-r1/probe.rs:8` creates an Unfreeze proposal, executes a real SetGuardians proposal, and verifies approve, execute and veto all fail while its rent account remains. For the fix, require cleanup to succeed once, refund the original payer, reject a substituted payer/cross-vault proposal, reject cleanup of a live immediate proposal, and keep the stale action unexecutable.
+
+## Integration and specification observations
+
+- **Known IDL gap, now resolved upstream:** the first `app/src/idl/argus.json` snapshot omitted TrustedAddress from both account metadata and type definitions (`programs/argus/src/state.rs:59`). The updated JSON and TS helper now include it. Mobile copies both corrected files and decodes all four account types, with ownership/discriminator/PDA/bump and parent/wallet checks. No fabricated account schema or on-chain layout change was introduced by mobile.
+- **Trusted activation wording:** `docs/PROGRAM-SPEC.md:64` says creation sets `active_at = now + delay_seconds`; the action table at `:128` says `active_at = now` after the proposal timelock. `execute_proposal.rs:149` implements the latter, covered by `tests/governance.rs:200`. Reconcile the earlier sentence; no extra delay bypass is alleged against the explicit action table.
+- **Permissionless role exceptions:** checklist B2/B3 and literal INV-5 conflict with the instruction table and the clarification at `PROGRAM-SPEC.md:146`. Deposit, execute-withdrawal and execute-proposal are permissionless, including for owner/AI callers. Executing a proposal requires approvals already collected from guardians; it does not give the executor authority to create those approvals. Apply the clarified rule when assessing INV-2/INV-5.
+- **Window definition:** the explicit rollover rule is a reset window starting at the last reset, not an exact sliding sum over every trailing 24 hours. The implementation follows §3. A spender can use allowances on both sides of a reset boundary; this is not recorded as a deviation from that rule. Align the threat model's “rolling” terminology with the chosen product promise.
+- **Trusted-record rent recipient:** `execute_proposal.rs:114` refunds RemoveTrusted rent to that removal's executor. The original AddTrusted executor is not stored in TrustedAddress. The source comments explicitly describe this public executor refund; `PROGRAM-SPEC.md:143` can be read as promising a refund to the original creator. Clarify the intended recipient; if it must be the original creator, store and constrain it. Proposal/Withdrawal rent uses the stored payer correctly.
+- **Deposit precheck:** `deposit.rs:44` checks positive amount and delegates insufficient-balance enforcement to the pinned SPL Token CPI. Vault outflows explicitly check balance in `shared.rs:20`. Deposit is atomic and cannot drain the vault; the checklist's literal requirement for an Argus-side check before *every* transfer is broader than the current implementation.
+
+## Verification and concurrent-build caveat
+
+The initial cached suites ran **141/141 behavioral tests green** (5 helpers, 31 initialization, 5 deposit, 9 instant, 12 trusted, 14 withdrawals, 23 protective, 40 governance, 2 rollback). These are observed cached executables, not a clean SBF rebuild by Codex. No build output was written to the program, root target, or Claude's tests.
+
+During a subsequent run `withdraw_instant.rs:16` temporarily lost `constraint = !vault.frozen`, changing its baseline hash. The corresponding newly built test executable failed `instant_rejects_when_frozen`: the transaction succeeded instead of returning Frozen. The constraint was then restored and the source hash returned to the original baseline. `codex-r1/freeze-regression-results.txt` preserves that observation. This is not listed as an open source finding after restoration, but mixed build-cache results must not be represented as an all-green build of a single revision.
+
+**Final verification: 142/142 project behavioral tests pass**: the restored 141-test run is in `codex-r1/restored-results.txt`, and the added 20 × 300 randomized-sequence test passed in `codex-r1/results.txt`. **3/3 independent probes also pass**, confirming R1-L1 and rejecting same-transaction withdrawal revival, plus 16 seeds × 96 randomized operations/signers checking balances, conservation, frozen instant withdrawals and unchanged configuration. The restored cached SBF SHA-256 is `18b04a6356fb2bda24e9765649ab9f9221a903dab9003d79ae98fc9ef1c9bece`. The earlier mixed run's overall exit was nonzero because it includes the temporary frozen-bypass failures; its final fuzz/probe sections are green. This bounded exploration is not exhaustive fuzzing.
+
+`codex-r1/run.py` records binary hashes and reruns cached behavioral tests (excluding generated IDL-print tests). It compiles the independent probes using the existing dependency cache, writing its outputs only under `docs/audits/codex-r1/`. Source review plus cached-executable tests does not establish a reproducible clean SBF build or deployed-bytecode match. Deployment remains pending.
+
+Mobile: **33/33 tests**, strict TypeScript, Expo dependency check, normal Android export and a separate Android Metro bundle containing the new program SDK pass. The separate entry is needed because live program calls remain disabled pending deployment. The generated JSON/TS copies match `app/src/idl/` exactly. Pattern scans of `mobile/dist/`, `mobile/.program-check/` and `app/dist/` found zero PEM private keys, long OpenAI/live secret tokens, assigned Supabase service-role tokens or literal 64-byte numeric keypair arrays (`codex-r1/verification-results.txt`). Generic keypair/signing library code is not itself a secret. This is a limited pattern scan, not proof that arbitrary secrets could never be encoded differently. Physical MWA/APK testing is still pending EAS/FCM setup.
+
+## Checklist
+
+Paths below are relative to `programs/argus/`, except explicitly named docs/mobile paths. ✅ records code/test evidence; ❌ records an unmet literal requirement or outstanding verification, not necessarily an exploitable defect. N/A records an unavailable component or a superseded literal rule.
+
+| Item | Result | Evidence / qualification |
+|---|---|---|
+| A1 PDA seeds and bump | ✅ | `instructions/initialize_vault.rs:17`, `request_withdrawal.rs:51`, `propose.rs:31`; read/update constraints in each consumer; runtime trusted derivation `execute_proposal.rs:76`; `tests/initialize_vault.rs:357`, `tests/withdrawals.rs:223`, `tests/governance.rs:311`. |
+| A2 child-vault binding | ✅ | `execute_withdrawal.rs:28`, `cancel_withdrawal.rs:29`, `approve.rs:31`, `execute_proposal.rs:34`, `withdraw_trusted.rs:69`; malformed trusted fields tested at `tests/withdraw_trusted.rs:144`. |
+| A3 types/unchecked justification | ✅ | Vault/Withdrawal/Proposal use Account; classic mint/token use InterfaceAccount plus pinned token program. Unchecked trusted record verifies program owner/discriminator/vault/wallet (`withdraw_trusted.rs:56`); ATA creation and refund accounts have constrained CHECK comments (`initialize_vault.rs:34`, `emergency_sweep.rs:43`, `execute_proposal.rs:40`). |
+| A4 canonical vault ATA | ✅ | `deposit.rs:25`, `withdraw_instant.rs:30`, `withdraw_trusted.rs:30`, `execute_withdrawal.rs:45`; init uses canonical address plus idempotent ATA CPI; `tests/initialize_vault.rs:370`. |
+| A5 destination mint and non-self | ✅ | `withdraw_instant.rs:39`, `withdraw_trusted.rs:39`, `request_withdrawal.rs:43`, `execute_withdrawal.rs:54`, shared non-self check `shared.rs:22`; `tests/withdraw_instant.rs:89`, `:105`, `tests/withdrawals.rs:192`. |
+| A6 safe ATA | ✅ | `emergency_sweep.rs:44`, `:52`, `:64`; idempotent ATA CPI checks existing token owner/mint. `tests/protective.rs:253`, `:265`, `:276`. |
+| A7 trusted seeds use destination authority | ✅ | `withdraw_trusted.rs:50`, record field checks `:69`; `tests/withdraw_trusted.rs:54`, `:68`, `:144`, `:155`. |
+| A8 unsafe mutable aliases | ✅ | SPL source/destination equality rejected (`shared.rs:22`, `deposit.rs:37`). Executor/rent-payer is intentionally permitted by `execute_proposal.rs:44`, safe because it receives the close refund; `tests/governance.rs:621`. Literal “no duplicates” needs this documented exception. |
+| B1 signer matrix | ✅ | Owner checks in three owner instructions; `state.rs:79` protective-role helper; guardian checks in propose/approve/veto/sweep; permissionless executors per §3. Negative role tests: `tests/withdraw_instant.rs:56`, `tests/protective.rs:71`, `:240`, `tests/governance.rs:25`, `:102`, `:574`. |
+| B2 AI only cancel/freeze | N/A | Literal blanket rejection is superseded by permissionless exception at spec `:146`. Gated negative tests at `tests/withdrawals.rs:153`, `tests/protective.rs:240`, `tests/governance.rs:102`; AI disable/replacement `:425`, `:439`, trusted overlap `:643`. |
+| B3 owner governance/sweep restriction | N/A | Propose/approve/veto/sweep reject owner; execute-proposal is explicitly Any. `tests/governance.rs:25`, `:34`, `:45`, `:54`, `:70`, `:574`; `tests/protective.rs:240`; approvals/eta/epoch gates at `execute_proposal.rs:61`. |
+| B4 current guardians | ✅ | `state.rs:93`, `:98`; all guardian instructions call guardian_index. Real replacement test `tests/governance.rs:475`. |
+| B5 role separation on changes | ✅ | `state.rs:113`, `:134`; init `initialize_vault.rs:65`, governance `governance.rs:80`, `:124`, `:133`; trusted-owner/AI checks `execute_proposal.rs:95`, `:175`. `tests/initialize_vault.rs`, `tests/governance.rs:170`, `:186`, `:526`, `:643`. |
+| C1 checked maturity calculation | ✅ | `request_withdrawal.rs:71`; `tests/withdrawals.rs:11`, `:55`. |
+| C2 immutable execution times | ✅ | Withdrawal time only written at request; Proposal::maybe_set_eta only writes when zero (`governance.rs:169`). `tests/governance.rs:373`, `:562`. |
+| C3 maturity checked | ✅ | `execute_withdrawal.rs:65`, `execute_proposal.rs:61`; `tests/withdrawals.rs:55`, `tests/governance.rs:355`, `:439`. |
+| C4 owner/guardian epochs | ✅ | `execute_withdrawal.rs:67`, `approve.rs:33`, `execute_proposal.rs:65`, epoch increments `:98`, `:171`. `tests/governance.rs:118`, `:144`, `:475`. |
+| C5 frozen matrix | ✅ | Baseline/restored `withdraw_instant.rs:16`, `withdraw_trusted.rs:18`, `request_withdrawal.rs:19`, `execute_withdrawal.rs:20`. `tests/protective.rs:166`, `tests/governance.rs:670`, deposit while frozen `tests/deposit.rs:19`. Concurrent mutant failure recorded above; final test status must distinguish it. |
+| C6 86,400-second rollover | ✅ | `withdraw_instant.rs:51` checked elapsed and inclusive reset; `tests/withdraw_instant.rs:37` checks one second early and exact boundary. Reset-window semantics as noted above. |
+| C7 threshold/eta once | ✅ | `governance.rs:169`, `propose.rs:70`, `approve.rs:50`; `tests/governance.rs:550`, `:562`, `:602`. |
+| C8 vetoability | ✅ | `veto.rs:45`, `governance.rs:52`; `tests/governance.rs:231`, `:347`, `:503`, `:518`. Stale cleanup omission is R1-L1. |
+| C9 all action validation | ✅ | `governance.rs:77` called at propose `propose.rs:46` and execute `execute_proposal.rs:69`; trusted count/live record checks `:95`, `:102`, `:133`, `:175`. Each action covered in `tests/governance.rs:170`–`:546`, revalidation at `:461`. |
+| D1 arithmetic | ✅ | Checked time/window/spend/counters/epochs/count/refund; `shared.rs:20`, `request_withdrawal.rs:71`, `propose.rs:56`, `execute_proposal.rs:98`, `:116`, `:157`, `:171`, `:196`. Guardian shifts bounded to slots 0–4 by `state.rs:113`; rent saturating deficit is deliberate `execute_proposal.rs:247`. Overflow test `tests/withdraw_instant.rs:118`. |
+| D2 positive amount/balance prechecks | ❌ | Outflows and requests explicitly check (`shared.rs:20`, `request_withdrawal.rs:63`). Deposit positive amount `deposit.rs:44` but balance is enforced inside classic SPL transfer CPI, not an explicit Argus precheck. No vault-fund exploit found; literal checklist deviation described above. |
+| D3 transfer_checked/decimals | ✅ | All four outflows use `shared.rs:33` with stored mint decimals; deposit `deposit.rs:46`. `tests/protective.rs:313` balance conservation and `tests/rollback.rs:21`, `:43` CPI rollback. |
+| D4 pinned token program | ✅ | `initialize_vault.rs:28` mint owner and `:34` classic program; each transfer instruction pins classic token program. All classic/Token-2022 combinations tested in `tests/initialize_vault.rs`; prevents Token-2022 extensions bypassing INV-1. |
+| D5 signer seeds | ✅ | `shared.rs:28` uses immutable creator, LE vault_id and stored bump. Every transfer happy path exercises the vault PDA signature; owner rotation test `tests/governance.rs:118` keeps immutable creator separate from current owner. |
+| E1 close and original rent payer | ✅ | `execute_withdrawal.rs:29`, `cancel_withdrawal.rs:30`, `execute_proposal.rs:35`, `veto.rs:32`; substitution/refund tests `tests/withdrawals.rs:33`, `:208`, `tests/protective.rs:46`, `:103`, `tests/governance.rs:231`. R1-L1: stale non-vetoable Proposal has no close operation. |
+| E2 monotonic IDs | ✅ | Checked increments `request_withdrawal.rs:75`, `propose.rs:56`; IDs scoped to vault; `tests/withdrawals.rs:86`, `tests/governance.rs:587`. |
+| E3 sizing/no growth | ✅ | InitSpace on state/Proposal; fixed guardian array and bounded SetGuardians Vec max 5 (`governance.rs:25`); maximum-action test `tests/governance.rs:656`. Custom trusted resize only shrinks to zero on close (`execute_proposal.rs:202`), never grows live data. |
+| E4 init_if_needed | N/A | None. Idempotent ATA creation cannot overwrite token data; custom TrustedAddress creation checks system owner/empty data and tops up/allocates/assigns (`execute_proposal.rs:225`), tested prefunding at `tests/governance.rs:275` and `tests/initialize_vault.rs:331`. |
+| F1 every invariant tested and passing | ✅ | Evidence map below; restored 141 project tests, added fuzz test and all 3 independent probes pass. Temporary frozen-bypass failures are preserved separately from the final results. |
+| F2 each named threat tested | ❌ | Program threat mapping below exists. A11 response/e2e and Sentinel O6 real-server test cannot be completed against an undeployed service. Mobile contract mock tests owner phone-removal rejection, not server enforcement. |
+| F3 every instruction happy path | ✅ | Initialization/deposit/instant/trusted/withdrawals/protective files exercise their instructions; governance propose/approve/veto/execute and all action variants in `tests/governance.rs:200`–`:546`. Initial cached 141-test run passed. |
+| F4 random instruction/signers | ✅ | `tests/fuzz.rs:81`, `:365` runs 20 × 300 sequences with successful-op coverage and passed (133.05 seconds). Independent 16 × 96 mixed-signer probe also passed. See `codex-r1/results.txt`; finite test coverage, not exhaustive proof. |
+| F5 clock travel | ✅ | LiteSVM Clock warp at `tests/common/mod.rs:68`; maturity/window/activation/eta tests in withdrawal, instant, trusted and governance suites. |
+| G1 bundle secret scan | ✅ | Pattern scans of freshly exported `mobile/dist/`, SDK `mobile/.program-check/` and existing `app/dist/` reported zero matches for the four patterns described above. No keypair files or secret environment files were opened. |
+| G2 AI key only on server | N/A | Server runtime/key loading not part of this implemented program/mobile slice; cannot certify it before Sentinel exists. Mobile has no guardian signing key. |
+| G3 Supabase RLS | N/A | No live database/credentials supplied. Requires inspection/testing of deployed policies later. |
+| G4 demo devnet-only assets | N/A | Program deployment and funded demo vault not announced; requires checking actual cluster/mint/vault later. |
+
+## Invariant and named-threat evidence
+
+| Invariant | Tests / source |
+|---|---|
+| INV-1 | `tests/protective.rs:313` covers conservation across all four outflows; instant cap `tests/withdraw_instant.rs:25`; trusted activation/binding tests; execute maturity/epoch/balance tests. |
+| INV-2 | Owner governance attack tests `tests/governance.rs:25`–`:100`; non-guardian approve/veto `:574`; sweep negative roles `tests/protective.rs:240`; independent random-sequence config assertions. |
+| INV-3 | `tests/governance.rs:373`, `:562`; request-time maturity `tests/withdrawals.rs:11`; no update path for stored Withdrawal times. |
+| INV-4 | `tests/protective.rs:166`; deposit while frozen `tests/deposit.rs:19`; temporary guard-removal regression is explicitly captured. |
+| INV-5 | Owner-only transfer/request negatives; `tests/governance.rs:102`, `tests/protective.rs:240`; current/disabled AI `tests/governance.rs:425`, `:439`; use spec permissionless clarification. |
+| INV-6 | Real rotation `tests/governance.rs:118`, spam cleanup `:144`; stale execution `tests/withdrawals.rs:123`. |
+| INV-7 | `tests/governance.rs:475` uses real SetGuardians, then rejects old approval/execution and removed guardian powers. |
+| INV-8 | `tests/governance.rs:550`, `:574`; signer-indexed bit update `approve.rs:40`. |
+| INV-9 | `tests/withdraw_instant.rs:89`, `tests/withdrawals.rs:168`, `tests/protective.rs:253`, `:265`. |
+| INV-10 | `tests/withdraw_instant.rs:118`, withdrawal overdraw/recheck tests `tests/withdrawals.rs:139`, `:168`, CPI rollback `tests/rollback.rs:21`, `:43`. |
+| INV-11 | Wrong PDA/mint/owner/discriminator tests throughout init, trusted and withdrawal suites; pinned classic mint/program matrix at initialization. |
+| INV-12 | Double execute/cancel and monotonic ID tests; trusted custom close `execute_proposal.rs:192`; independent same-transaction close/refund/re-execute probe `codex-r1/probe.rs:26`. |
+
+Named program threat tests from THREAT-MODEL A1–A8/A10 and G3 are present with matching functions: `attack_owner_request_then_cancel`, `attack_request_voided_by_rotation`, `attack_owner_cannot_add_trusted`, `attack_owner_cannot_loosen`, `attack_owner_cannot_rotate`, `attack_owner_cannot_set_guardians`, `attack_instant_capped`, `attack_window_rollover`, `trusted_send_goes_to_owner_address`, `attack_spam_requests_voided`, `owner_freeze_needs_threshold_unfreeze`, `attack_owner_cannot_unfreeze`, and `attack_rogue_guardian_cannot_block_removal`. A9 has no named test; A11 and off-chain O6 need actual service/e2e validation. Guardian threshold, AI compromise and P1–P12 are additionally covered by the account, role, epoch, CPI rollback and independent revival probes cited above; this does not claim a separately named test exists for every unnamed threat row.

@@ -1,0 +1,162 @@
+[
+  {
+    "path": "programs/argus/src/state.rs",
+    "sha256": "429caaf3d413cd28a19af97b47e42029d31117903bd84f11d44db40e40bdcdfa"
+  },
+  {
+    "path": "programs/argus/src/lib.rs",
+    "sha256": "1260b0212b755103ace26fd6e92b8da43e7515e4f2e2cd868072dfc6f73c1db1"
+  },
+  {
+    "path": "programs/argus/src/instructions.rs",
+    "sha256": "68c3dfcb132c1f7e41e71bce3b2f71fe418d6ec975695172c4848842ab041780"
+  },
+  {
+    "path": "programs/argus/tests/withdraw_trusted.rs",
+    "sha256": "492698ad91e350faf20adf75f959a5eb80c7ca942556c6def206db50bfaee75b"
+  },
+  {
+    "path": "programs/argus/tests/withdraw_instant.rs",
+    "sha256": "4fc71e5dd22ec6e89b1a55c0b22c13bc4d7a971974ca7fef744823830b59a309"
+  },
+  {
+    "path": "programs/argus/tests/withdrawals.rs",
+    "sha256": "74667f30900b9fb8d877bbbf957e1a23f0a70694e8e21fdfb0d217f4e9dc6f09"
+  },
+  {
+    "path": "programs/argus/tests/rollback.rs",
+    "sha256": "cc9122ccd525473a1b8fa3047eaefeb8e63e156709b9fb8a3e052e610da36489"
+  },
+  {
+    "path": "programs/argus/tests/protective.rs",
+    "sha256": "5a66bc29278c8542ebef7e6fc3428e6be82aaad7d452a888a1392b780b9dfc9b"
+  },
+  {
+    "path": "programs/argus/tests/initialize_vault.rs",
+    "sha256": "709e85516d5ec575e50e93d309627eb66e9a20b38dff2f874154380fee33e88e"
+  },
+  {
+    "path": "programs/argus/tests/governance.rs",
+    "sha256": "b1643193458d13aee75a5f1d0b788011ce4bc7557a6d219df42c7528613fa7c3"
+  },
+  {
+    "path": "programs/argus/tests/deposit.rs",
+    "sha256": "7561f8f95962a5bc24cabafa60b464712b88998f8d452dd224636fc24ed2e0cf"
+  },
+  {
+    "path": "programs/argus/src/instructions/withdraw_trusted.rs",
+    "sha256": "be5d7fbc3e7fb8e3c37e93dcaa3a8a6267fae4f0ddfe0327fc1d46c0465ce52c"
+  },
+  {
+    "path": "programs/argus/tests/common/mod.rs",
+    "sha256": "aa68f1c26f372499c73b71820792007a1804bf82735efd4c4bebc7a3413ffa04"
+  },
+  {
+    "path": "programs/argus/src/instructions/withdraw_instant.rs",
+    "sha256": "bf8983f83d28331b4ca65bfd3efc89c33ee5136ee922e13861334c0d69aa90cd"
+  },
+  {
+    "path": "programs/argus/src/instructions/veto.rs",
+    "sha256": "512cb1d0ad016a4b16fd9d6b891a66e81d1d3a6a465b326352e280be9dcb94e9"
+  },
+  {
+    "path": "programs/argus/src/instructions/shared.rs",
+    "sha256": "4415f32f18effe693852555e0611b0d06cf8ad564236f7d08784168587e25361"
+  },
+  {
+    "path": "programs/argus/src/instructions/request_withdrawal.rs",
+    "sha256": "86de52c94a5a8b394ce32423fe4463a8d3d73ae5e38880e841f6e8703d9881ca"
+  },
+  {
+    "path": "programs/argus/src/instructions/propose.rs",
+    "sha256": "f2c1f529647a6bc2382dc9a574a94a434ea55302b35bfb35f88736ce045a0248"
+  },
+  {
+    "path": "programs/argus/src/instructions/initialize_vault.rs",
+    "sha256": "4aa91d6eb847bbee7bc4853e4af62a85da0ec09c9e0170dd2426b893ecf63c03"
+  },
+  {
+    "path": "programs/argus/src/instructions/freeze.rs",
+    "sha256": "ada168da5a54fd7d19102d6a391f005b917b626cf68d8b6945f4767bb05405b1"
+  },
+  {
+    "path": "programs/argus/src/instructions/execute_withdrawal.rs",
+    "sha256": "6498445ce2fafd77b58a499d4755a715d4816c8dd2d33ba21ca461a5cd8ac2a2"
+  },
+  {
+    "path": "programs/argus/src/instructions/execute_proposal.rs",
+    "sha256": "f6d83d1379a0bded6efe482e7dd6f477392fbb58245f2a26c41c9ffae9fe097c"
+  },
+  {
+    "path": "programs/argus/src/instructions/emergency_sweep.rs",
+    "sha256": "3f53093dbb4c4a71874bd6b36ecdbd2f38307efdee1054fce5c4786108fb1bd5"
+  },
+  {
+    "path": "programs/argus/src/instructions/deposit.rs",
+    "sha256": "588195e95f083545c0021b973dae01c177518e1493ba43dc9289f5507c47532a"
+  },
+  {
+    "path": "programs/argus/src/instructions/cancel_withdrawal.rs",
+    "sha256": "9c51e4cbb5c26c6e2e67e30a19f2908d2788b5968e45801b35eb9e8e758da502"
+  },
+  {
+    "path": "programs/argus/src/instructions/approve.rs",
+    "sha256": "68054c94e026897f87ac6ba82f071de816f772067f7c8db0b3d36d2531468a7b"
+  },
+  {
+    "path": "programs/argus/src/governance.rs",
+    "sha256": "7847f2d2f06fa9cd2a020ffe4a68eea620514c193f9d02d975406ce6f73d00b8"
+  },
+  {
+    "path": "programs/argus/src/events.rs",
+    "sha256": "5c10c5cc73d15e705cb14f994e0fcdae7b32ce5ef5b4cc51cde780b93cca74c7"
+  },
+  {
+    "path": "programs/argus/src/error.rs",
+    "sha256": "936a46c438d3f07f84329c9ec7ee81a2d850afb62370d3ce8f7916f6a95fbdaa"
+  },
+  {
+    "path": "programs/argus/src/constants.rs",
+    "sha256": "bad64966cd8ac83f99fb76e097da4adde5b95049e6b545094fda1880b7000e40"
+  },
+  {
+    "path": "docs/PROGRAM-SPEC.md",
+    "sha256": "e384d639449e3ef8e0bf1f662afe5963612213a9f3449789166f5c5ff1c36f12"
+  },
+  {
+    "path": "docs/THREAT-MODEL.md",
+    "sha256": "7aa7f3061a4618f134fda8c29a0181fc23315c6391f694b87dd9fc8502c5cec4"
+  },
+  {
+    "path": "docs/AUDIT-CHECKLIST.md",
+    "sha256": "bd73426737c6f58431cbc1b6e6ff6cf4011c6a6ec94e091a10a08a8f06ddcb4a"
+  },
+  {
+    "path": "app/src/idl/argus.json",
+    "sha256": "d3b683eebaa00992bb04ecb53bc6d7d79c9d5fb7793e4032aeca51bfd2140fed"
+  },
+  {
+    "path": "programs/argus/Cargo.toml",
+    "sha256": "acf7ba821fb70319287954ba1650be5c1748ba00a6dc6c91045e47a19c041df2"
+  },
+  {
+    "path": "Cargo.toml",
+    "sha256": "1d92d53c62df8f99c76b6d7309471a455f828c39d973e8830d08eff1ce30a046"
+  },
+  {
+    "path": "Cargo.lock",
+    "sha256": "070ce5b21ff4555071a64883295b4c9cc4fc60bc506ae2297b372c4e42254afb"
+  },
+  {
+    "path": "Anchor.toml",
+    "sha256": "b756759c3aefeff676dba3d11c77609cec0063c606d6ccd891b91454bc659fca"
+  },
+  {
+    "path": "programs/argus/tests/fuzz.rs",
+    "sha256": "6bc4f9194648f3bca02e0f9cce3db92d83234d16b921726fb7fd40fcd9d12093"
+  },
+  {
+    "path": "app/src/idl/argus.ts",
+    "sha256": "81a6d6e0b0809568c39cbd0c8421cb1c99d133651f536b7bd2a7b99385fc1628"
+  }
+]

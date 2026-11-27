@@ -1,0 +1,16 @@
+Source files changed from initial manifest: ['app/src/idl/argus.json']
+mobile/dist: 10 artifacts
+  PEM private key: 0 matching files
+  long secret token: 0 matching files
+  assigned service role: 0 matching files
+  literal 64-byte keypair array: 0 matching files
+mobile/.program-check: 1 artifacts
+  PEM private key: 0 matching files
+  long secret token: 0 matching files
+  assigned service role: 0 matching files
+  literal 64-byte keypair array: 0 matching files
+app/dist: 5 artifacts
+  PEM private key: 0 matching files
+  long secret token: 0 matching files
+  assigned service role: 0 matching files
+  literal 64-byte keypair array: 0 matching files
