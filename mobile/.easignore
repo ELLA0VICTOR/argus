@@ -15,3 +15,5 @@ keys/
 *.keystore
 credentials.json
 google-services.json
+*.apk
+*.aab

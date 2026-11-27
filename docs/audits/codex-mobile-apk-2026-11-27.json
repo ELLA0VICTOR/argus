@@ -1,0 +1,14 @@
+{
+  "build": "992ad6a2-8847-4916-9669-5cfe0b0f5c40",
+  "status": "FINISHED",
+  "profile": "development",
+  "url": "https://expo.dev/artifacts/eas/c5rPBcDhs1LW--wJl5bAwqpfjT8vVH7cQVDq9vayEPw.apk",
+  "bytes": 286450864,
+  "sha256": "a27306a3131c39953b068ff4289f786ec3c740fbcd3e6623f742032f99ebdd38",
+  "package": "com.argus.vault",
+  "abis": ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"],
+  "zip_integrity": "passed",
+  "hosted_mobile_smoke": "8/8 passed",
+  "mobile_unit_tests": "63/63 passed",
+  "physical_device_test": "pending"
+}
