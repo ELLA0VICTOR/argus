@@ -60,7 +60,7 @@ function Account() {
   const { me, role } = useVault();
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3">
-      <span className="size-9 shrink-0 rounded-full bg-[conic-gradient(from_200deg,#93c5fd,#2563eb,#a5b4fc,#93c5fd)] ring-2 ring-white" aria-hidden="true" />
+      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft text-brand" aria-hidden="true"><Icon name="wallet" size={16} /></span>
       <div className="min-w-0 flex-1">
         <div className="text-[13.5px] font-medium">{role === "owner" ? "Owner" : "Guardian"}</div>
         <div className="font-mono text-[11.5px] text-muted">{shortAddr(me)}</div>

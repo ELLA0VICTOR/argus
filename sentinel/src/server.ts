@@ -43,9 +43,20 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   }
 }
 
+// Behind a host's proxy (Hugging Face, Render…) every request comes from the
+// proxy. TRUST_PROXY_HOPS=1 reads the address that proxy appended to
+// X-Forwarded-For. Entries further left are client-supplied and can be faked,
+// so they're never used. With 0 (local), the header is ignored.
+const PROXY_HOPS = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+
 function clientIp(req: IncomingMessage): string {
-  const fwd = req.headers["x-forwarded-for"];
-  return (Array.isArray(fwd) ? fwd[0] : fwd)?.split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+  if (PROXY_HOPS > 0) {
+    const raw = req.headers["x-forwarded-for"];
+    const list = (Array.isArray(raw) ? raw.join(",") : (raw ?? "")).split(",").map((x) => x.trim()).filter(Boolean);
+    const ip = list[list.length - PROXY_HOPS];
+    if (ip) return ip;
+  }
+  return req.socket.remoteAddress || "unknown";
 }
 
 const server = createServer(async (req, res) => {

@@ -62,10 +62,10 @@ The triangle "A" with an almond eye, with **rounded strokes and a single colour*
 ## Inside the app (`/app`)
 
 - **Quiet white UI.** White rounded cards (`Group`, 20px radius, hairline dividers) on a soft `canvas` background. A white left sidebar on desktop, five tabs on phones (Home, Send, Activity, Guardians, Settings). Page titles use the serif, as on the landing page.
-- **Home:** a balance card with a status pill ("Protected", "Argus is on it", "Frozen") and a meter for today's instant allowance, Send (blue) and Deposit, and a "Freeze vault" text button. Then "Needs your attention" (red band), "Waiting to leave" (each with a thin bar for how much of the wait has passed), and "Recent activity" as a dot timeline.
+- **Home:** a plain balance card (no badge, no gradient) with a solid blue meter for today's instant allowance, Send (blue) and Deposit, and a "Freeze vault" text button. Then "Needs your attention" (a small red dot, nothing louder), "Waiting to leave" (each with a thin bar for how much of the wait has passed), and "Recent activity" as a dot timeline.
 - **Send:** one card. A three-way route indicator (Instant / Trusted / Waits 24h) lights up the path the transfer will take before you sign.
 - **People and keys** get a round initials avatar. The AI guardian uses the Argus mark.
-- **Colour only to act:** red Cancel on a suspicious item, amber countdowns, green "done" and "Protected".
+- **Colour only to act:** red Cancel on a suspicious item, amber countdowns, green "done".
 - **Plain sentence-case language.** No instruction names, and no all-caps labels.
 
 ## Mobile (Codex, `mobile/`)

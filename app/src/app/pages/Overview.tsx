@@ -14,26 +14,13 @@ export default function Overview() {
   const left = vault.dailyLimit - spent;
   const used = vault.dailyLimit > 0n ? Number((spent * 1000n) / vault.dailyLimit) / 1000 : 1;
 
-  const status = vault.frozen
-    ? { label: "Frozen", dot: "bg-brand", cls: "bg-brand-soft text-brand" }
-    : flagged.length > 0
-      ? { label: "Argus is on it", dot: "bg-threat animate-pulse-dot", cls: "bg-threat-bg text-threat-soft" }
-      : { label: "Protected", dot: "bg-safe animate-pulse-dot", cls: "bg-safe-bg text-safe-soft" };
 
   return (
     <Container className="space-y-10 lg:pt-16">
       {/* balance */}
       <section className="relative overflow-hidden rounded-[28px] border border-line bg-white p-6 shadow-[0_24px_60px_-40px_rgba(23,37,84,0.35)] sm:p-9">
-        <div className="pointer-events-none absolute -top-32 -right-24 size-[380px] rounded-full bg-[radial-gradient(closest-side,rgba(59,130,246,0.14),transparent)]" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-40 left-1/3 size-[320px] rounded-full bg-[radial-gradient(closest-side,rgba(251,146,60,0.08),transparent)]" aria-hidden="true" />
 
-        <div className="relative flex items-center justify-between gap-3">
-          <div className="text-[14px] text-muted">{vault.name} vault</div>
-          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12.5px] font-medium ${status.cls}`}>
-            <span className={`size-1.5 rounded-full ${status.dot}`} />
-            {status.label}
-          </span>
-        </div>
+        <div className="text-[14px] text-muted">{vault.name} vault</div>
 
         <div className="relative mt-3 flex items-baseline gap-3">
           <span className="num text-[46px] leading-none font-medium tracking-[-0.035em] sm:text-[64px]">{formatAmount(vault.balance, vault.decimals)}</span>
@@ -52,7 +39,7 @@ export default function Overview() {
               </span>
             </div>
             <div className="mt-2 h-[6px] overflow-hidden rounded-full bg-panel ring-1 ring-line-soft">
-              <div className="h-full rounded-full bg-gradient-to-r from-[#93c5fd] to-[#2563eb]" style={{ width: `${(1 - used) * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
+              <div className="h-full rounded-full bg-brand" style={{ width: `${(1 - used) * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
             </div>
             <p className="mt-2.5 text-[13px] text-muted">Larger amounts wait {formatDuration(vault.delay)} and can be cancelled.</p>
           </div>
@@ -81,7 +68,7 @@ export default function Overview() {
       {flagged.length > 0 && (
         <section>
           <SectionTitle>Needs your attention</SectionTitle>
-          <Group className="border-threat/25">
+          <Group>
             {flagged.map((w) => (
               <WithdrawalRow key={w.id} w={w} />
             ))}

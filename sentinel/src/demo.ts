@@ -28,7 +28,7 @@ const demoSafe = loadKey("demo-safe");
 /* ------------------------------------------------------------ test mint */
 
 const CONFIG = join(ROOT, "demo-config.json");
-let MINT: PublicKey | null = existsSync(CONFIG) ? new PublicKey(JSON.parse(readFileSync(CONFIG, "utf8")).mint) : null;
+let MINT: PublicKey | null = process.env.DEMO_MINT ? new PublicKey(process.env.DEMO_MINT) : existsSync(CONFIG) ? new PublicKey(JSON.parse(readFileSync(CONFIG, "utf8")).mint) : null;
 
 export async function ensureMint(): Promise<PublicKey> {
   if (MINT) return MINT;

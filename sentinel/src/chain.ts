@@ -9,7 +9,8 @@ import { ROOT } from "./keys.ts";
 export const RPC_URL = process.env.RPC_URL ?? "https://api.devnet.solana.com";
 export const connection = new Connection(RPC_URL, "confirmed");
 
-export const idl = JSON.parse(readFileSync(join(ROOT, "..", "app", "src", "idl", "argus.json"), "utf8")) as Idl & {
+// The IDL is the one the web app ships (app/src/idl). IDL_PATH overrides it.
+export const idl = JSON.parse(readFileSync(process.env.IDL_PATH ?? join(ROOT, "..", "app", "src", "idl", "argus.json"), "utf8")) as Idl & {
   address: string;
   errors: { code: number; name: string; msg: string }[];
 };

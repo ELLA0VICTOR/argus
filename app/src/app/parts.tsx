@@ -79,9 +79,9 @@ export function WithdrawalRow({ w }: { w: Withdrawal }) {
   return (
     <div className="enter border-b border-line-soft last:border-0">
       {flagged && (
-        <div className="flex items-center gap-2 bg-threat-bg px-5 py-2.5 text-[13px] font-medium text-threat-soft">
-          <span className="size-1.5 animate-pulse-dot rounded-full bg-threat" />
-          Looks suspicious · Argus is calling you
+        <div className="flex items-center gap-2 border-b border-line-soft px-5 py-2.5 text-[13px] text-muted">
+          <span className="size-1.5 rounded-full bg-threat" />
+          Looks suspicious. Argus is calling you.
         </div>
       )}
       <div className="px-5 pt-5 pb-4">
@@ -109,7 +109,7 @@ export function WithdrawalRow({ w }: { w: Withdrawal }) {
 
         {/* how much of the wait has passed */}
         <div className="mt-4 h-[3px] overflow-hidden rounded-full bg-line-soft" aria-hidden="true">
-          <div className={`h-full rounded-full ${flagged ? "bg-threat/70" : "bg-wait/60"}`} style={{ width: `${passed * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
+          <div className={`h-full rounded-full bg-wait/60`} style={{ width: `${passed * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
         </div>
 
         {(w.reason || w.signals.length > 0) && (
