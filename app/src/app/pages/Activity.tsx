@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Container, PageHeader } from "../Shell";
-import { EmptyState, LogList } from "../parts";
+import { EmptyState, Group, LogList } from "../parts";
 import { useVault, type LogEntry } from "../store";
 
 const FILTERS: { id: string; label: string; match: (e: LogEntry) => boolean }[] = [
@@ -18,7 +18,7 @@ export default function Activity() {
     <>
       <PageHeader title="Activity" subtitle="Everything Argus saw and did, newest first." />
       <Container>
-        <div className="mb-6 flex gap-5 border-b border-line" role="tablist">
+        <div className="mb-5 inline-flex rounded-full border border-line bg-white p-1 shadow-[0_1px_2px_rgba(16,24,40,0.04)]" role="tablist">
           {FILTERS.map((x) => (
             <button
               key={x.id}
@@ -26,13 +26,13 @@ export default function Activity() {
               role="tab"
               aria-selected={f === x.id}
               onClick={() => setF(x.id)}
-              className={`-mb-px border-b pb-3 text-[14px] transition-colors ${f === x.id ? "border-fg text-fg" : "border-transparent text-muted hover:text-fg"}`}
+              className={`h-8 rounded-full px-4 text-[13.5px] transition-colors ${f === x.id ? "bg-fg font-medium text-white" : "text-muted hover:text-fg"}`}
             >
               {x.label}
             </button>
           ))}
         </div>
-        {rows.length === 0 ? <EmptyState title="Nothing here yet" body="Events appear as soon as Argus sees them on-chain." /> : <LogList entries={rows} />}
+        <Group>{rows.length === 0 ? <EmptyState title="Nothing here yet" body="Events appear as soon as Argus sees them on-chain." /> : <LogList entries={rows} />}</Group>
       </Container>
     </>
   );

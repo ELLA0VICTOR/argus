@@ -3,7 +3,8 @@ import { Address, Button } from "../../components/ui";
 import { formatAmount, formatCountdown, formatDuration, shortAddr } from "../../lib/format";
 import { useNow } from "../../lib/hooks";
 import { Container, PageHeader } from "../Shell";
-import { EmptyState, SectionTitle } from "../parts";
+import { Avatar, EmptyState, Group, GroupRow, SectionTitle } from "../parts";
+import { Logo } from "../../components/Logo";
 import { describeAction, isVetoable, PROPOSAL_TTL, timelock, useVault, type Proposal, type ProposalAction } from "../store";
 
 export default function Guardians() {
@@ -22,44 +23,55 @@ export default function Guardians() {
           ) : undefined
         }
       />
-      <Container className="space-y-12">
+      <Container className="space-y-10">
         {composing && <Composer onClose={() => setComposing(false)} />}
 
         <section>
           <SectionTitle count={vault.proposals.length}>Proposals</SectionTitle>
-          <div className="border-t border-line">
+          <Group>
             {vault.proposals.length === 0 ? (
               <EmptyState title="No open proposals" body="Changes to keys, limits or trusted addresses show up here for guardians to approve." />
             ) : (
               vault.proposals.map((p) => <ProposalRow key={p.id} p={p} />)
             )}
-          </div>
-          {role === "owner" && <p className="mt-4 text-[13.5px] text-muted">You can see proposals as the owner, but only guardians vote. That way a stolen owner key can't change any rule.</p>}
+          </Group>
+          {role === "owner" && <p className="mt-3 px-1 text-[13.5px] leading-relaxed text-muted">You can see proposals as the owner, but only guardians vote. That way a stolen owner key can't change any rule.</p>}
         </section>
 
         <section>
           <SectionTitle>Who's protecting this vault</SectionTitle>
-          <div className="border-t border-line">
+          <Group>
             {vault.guardians.map((g) => (
-              <div key={g.key} className="flex items-center justify-between gap-4 border-b border-line py-4">
-                <div>
-                  <div className="text-[15px]">
+              <GroupRow
+                key={g.key}
+                lead={<Avatar name={g.name} />}
+                label={
+                  <>
                     {g.name}
                     {g.you && role === "guardian" && <span className="ml-2 text-[13px] text-muted">(you)</span>}
-                  </div>
-                  <div className="text-[13.5px] text-muted">{g.note}</div>
-                </div>
+                  </>
+                }
+                hint={g.note}
+              >
                 <Address value={g.key} className="text-[12.5px] text-muted" />
-              </div>
+              </GroupRow>
             ))}
-            <div className="flex items-center justify-between gap-4 py-4">
-              <div>
-                <div className="text-[15px]">AI guardian</div>
-                <div className="text-[13.5px] text-muted">Can cancel and freeze. Can never move funds or vote.</div>
-              </div>
-              <span className="text-[13px] text-muted">On</span>
-            </div>
-          </div>
+            <GroupRow
+              lead={
+                <Avatar>
+                  <span className="text-fg">
+                    <Logo size={20} />
+                  </span>
+                </Avatar>
+              }
+              label="AI guardian"
+              hint="Can cancel and freeze. Can never move funds or vote."
+            >
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-safe-bg px-2.5 py-0.5 text-[12.5px] font-medium text-safe-soft">
+                <span className="size-1.5 animate-pulse-dot rounded-full bg-safe" /> Watching
+              </span>
+            </GroupRow>
+          </Group>
         </section>
       </Container>
     </>
@@ -90,7 +102,7 @@ function ProposalRow({ p }: { p: Proposal }) {
     status = `Needs ${need} more approval${need === 1 ? "" : "s"}. Expires in ${Math.floor(expiresIn / 86_400)}d ${Math.floor((expiresIn % 86_400) / 3600)}h.`;
 
   return (
-    <div className="enter flex flex-col gap-4 border-b border-line py-5 sm:flex-row sm:items-start sm:justify-between">
+    <div className="enter flex flex-col gap-4 border-b border-line-soft px-5 py-5 last:border-0 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0">
         <div className="text-[16px] font-medium">{describeAction(p.action)}</div>
         <Detail a={p.action} />
@@ -158,7 +170,7 @@ function Composer({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <section className="enter rounded-[20px] border border-line bg-white p-5 shadow-[0_20px_50px_-30px_rgba(23,37,84,0.35)] sm:p-6">
+    <section className="enter rounded-[24px] border border-line bg-white p-5 shadow-[0_24px_60px_-40px_rgba(23,37,84,0.35)] sm:p-7">
       <SectionTitle>New proposal</SectionTitle>
       <div role="radiogroup" className="space-y-1">
         {KINDS.map((k) => (

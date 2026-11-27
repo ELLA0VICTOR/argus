@@ -3,34 +3,62 @@ import { Icon } from "../../components/Icon";
 import { Button, ButtonLink } from "../../components/ui";
 import { formatAmount, formatDuration } from "../../lib/format";
 import { Container } from "../Shell";
-import { LogList, SectionTitle, WithdrawalRow } from "../parts";
+import { Group, LogList, SectionTitle, WithdrawalRow } from "../parts";
 import { useVault } from "../store";
 
 export default function Overview() {
   const { vault, freeze, role } = useVault();
   const flagged = vault.pending.filter((p) => p.risk === "high" || p.risk === "critical");
   const normal = vault.pending.filter((p) => !flagged.includes(p));
-  const left = vault.dailyLimit > vault.spentInWindow ? vault.dailyLimit - vault.spentInWindow : 0n;
+  const spent = vault.spentInWindow < vault.dailyLimit ? vault.spentInWindow : vault.dailyLimit;
+  const left = vault.dailyLimit - spent;
+  const used = vault.dailyLimit > 0n ? Number((spent * 1000n) / vault.dailyLimit) / 1000 : 1;
+
+  const status = vault.frozen
+    ? { label: "Frozen", dot: "bg-brand", cls: "bg-brand-soft text-brand" }
+    : flagged.length > 0
+      ? { label: "Argus is on it", dot: "bg-threat animate-pulse-dot", cls: "bg-threat-bg text-threat-soft" }
+      : { label: "Protected", dot: "bg-safe animate-pulse-dot", cls: "bg-safe-bg text-safe-soft" };
 
   return (
-    <Container className="lg:pt-14">
+    <Container className="space-y-10 lg:pt-16">
       {/* balance */}
-      <section>
-        <div className="text-[14px] text-muted">{vault.name} vault</div>
-        <div className="mt-2 flex items-baseline gap-3">
-          <span className="num text-[46px] leading-none font-medium tracking-[-0.03em] sm:text-[60px]">{formatAmount(vault.balance, vault.decimals)}</span>
+      <section className="relative overflow-hidden rounded-[28px] border border-line bg-white p-6 shadow-[0_24px_60px_-40px_rgba(23,37,84,0.35)] sm:p-9">
+        <div className="pointer-events-none absolute -top-32 -right-24 size-[380px] rounded-full bg-[radial-gradient(closest-side,rgba(59,130,246,0.14),transparent)]" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-40 left-1/3 size-[320px] rounded-full bg-[radial-gradient(closest-side,rgba(251,146,60,0.08),transparent)]" aria-hidden="true" />
+
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="text-[14px] text-muted">{vault.name} vault</div>
+          <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12.5px] font-medium ${status.cls}`}>
+            <span className={`size-1.5 rounded-full ${status.dot}`} />
+            {status.label}
+          </span>
+        </div>
+
+        <div className="relative mt-3 flex items-baseline gap-3">
+          <span className="num text-[46px] leading-none font-medium tracking-[-0.035em] sm:text-[64px]">{formatAmount(vault.balance, vault.decimals)}</span>
           <span className="text-[18px] text-muted">{vault.symbol}</span>
         </div>
-        <p className="mt-4 max-w-[34rem] text-[15px] leading-relaxed text-muted">
-          {vault.frozen ? (
-            <>The vault is frozen. Nothing can leave until {vault.threshold} guardians unfreeze it.</>
-          ) : (
-            <>
-              You can spend <span className="num text-fg">{formatAmount(left, vault.decimals)}</span> instantly today. Larger amounts wait {formatDuration(vault.delay)} and can be cancelled.
-            </>
-          )}
-        </p>
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
+
+        {vault.frozen ? (
+          <p className="relative mt-5 max-w-[34rem] text-[15px] leading-relaxed text-muted">Nothing can leave until {vault.threshold} guardians unfreeze it.</p>
+        ) : (
+          <div className="relative mt-7 max-w-[420px]">
+            <div className="flex items-baseline justify-between text-[13.5px]">
+              <span className="text-muted">Instant today</span>
+              <span>
+                <span className="num font-medium">{formatAmount(left, vault.decimals)}</span>
+                <span className="num text-muted"> of {formatAmount(vault.dailyLimit, vault.decimals)}</span>
+              </span>
+            </div>
+            <div className="mt-2 h-[6px] overflow-hidden rounded-full bg-panel ring-1 ring-line-soft">
+              <div className="h-full rounded-full bg-gradient-to-r from-[#93c5fd] to-[#2563eb]" style={{ width: `${(1 - used) * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
+            </div>
+            <p className="mt-2.5 text-[13px] text-muted">Larger amounts wait {formatDuration(vault.delay)} and can be cancelled.</p>
+          </div>
+        )}
+
+        <div className="relative mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-2">
           {role === "owner" && (
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <ButtonLink to="/app/send" variant="primary" size="lg">
@@ -42,7 +70,7 @@ export default function Overview() {
             </div>
           )}
           {!vault.frozen && (
-            <button type="button" onClick={() => freeze()} className="ml-1 inline-flex min-h-11 items-center gap-2 px-3 text-[14px] text-muted hover:text-fg">
+            <button type="button" onClick={() => freeze()} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-[14px] text-muted transition-colors hover:bg-panel hover:text-fg sm:ml-1">
               <Icon name="snow" size={16} /> Freeze vault
             </button>
           )}
@@ -51,28 +79,28 @@ export default function Overview() {
 
       {/* attention first */}
       {flagged.length > 0 && (
-        <section className="mt-14">
+        <section>
           <SectionTitle>Needs your attention</SectionTitle>
-          <div className="border-t border-line">
+          <Group className="border-threat/25">
             {flagged.map((w) => (
               <WithdrawalRow key={w.id} w={w} />
             ))}
-          </div>
+          </Group>
         </section>
       )}
 
       {normal.length > 0 && (
-        <section className="mt-12">
+        <section>
           <SectionTitle count={normal.length}>Waiting to leave</SectionTitle>
-          <div className="border-t border-line">
+          <Group>
             {normal.map((w) => (
               <WithdrawalRow key={w.id} w={w} />
             ))}
-          </div>
+          </Group>
         </section>
       )}
 
-      <section className="mt-12">
+      <section>
         <SectionTitle
           right={
             <Link to="/app/activity" className="nudge inline-flex items-center gap-1.5 text-[13.5px] text-muted hover:text-fg">
@@ -82,11 +110,10 @@ export default function Overview() {
         >
           Recent activity
         </SectionTitle>
-        <div className="border-t border-line">
+        <Group>
           <LogList entries={vault.log} limit={5} />
-        </div>
+        </Group>
       </section>
-
     </Container>
   );
 }

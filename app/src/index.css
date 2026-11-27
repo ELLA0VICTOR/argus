@@ -8,6 +8,7 @@
 @theme {
   --color-ink: #ffffff;        /* page background */
   --color-panel: #f4f6fa;      /* soft surface */
+  --color-canvas: #f7f8fb;     /* app page background, under white cards */
   --color-raised: #eef2f8;     /* hover / pressed surface */
   --color-line: #e4e8ef;       /* 1px borders, dividers */
   --color-line-soft: #eef1f6;

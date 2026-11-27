@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
-import { Logo, Wordmark } from "../components/Logo";
+import { Wordmark } from "../components/Logo";
 import { Icon, type IconName } from "../components/Icon";
 import { explorerTx, shortAddr } from "../lib/format";
 import { useVault } from "./store";
@@ -15,7 +15,7 @@ const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
 
 export function Shell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-ink lg:grid lg:grid-cols-[232px_1fr]">
+    <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[248px_1fr]">
       <Sidebar />
       <div className="flex min-w-0 flex-col">
         <MobileTop />
@@ -29,8 +29,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
 function Sidebar() {
   return (
-    <aside className="sticky top-0 hidden h-screen flex-col border-r border-line lg:flex">
-      <div className="flex h-16 items-center px-6">
+    <aside className="sticky top-0 hidden h-screen flex-col border-r border-line bg-white lg:flex">
+      <div className="flex h-[72px] items-center px-6">
         <Link to="/" aria-label="Argus home">
           <Wordmark size={24} />
         </Link>
@@ -41,7 +41,7 @@ function Sidebar() {
             key={n.to}
             to={n.to}
             end={n.end}
-            className={({ isActive }) => `flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] transition-colors ${isActive ? "bg-panel font-medium text-fg" : "text-muted hover:text-fg"}`}
+            className={({ isActive }) => `group relative flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] transition-colors ${isActive ? "bg-panel font-medium text-fg" : "text-muted hover:bg-panel/60 hover:text-fg"}`}
           >
             <Icon name={n.icon} size={17} />
             {n.label}
@@ -59,22 +59,32 @@ function Sidebar() {
 function Account() {
   const { me, role } = useVault();
   return (
-    <div className="flex items-center justify-between rounded-xl border border-line px-3 py-2.5">
-      <div>
-        <div className="text-[13px]">{role === "owner" ? "Owner" : "Guardian"}</div>
-        <div className="num text-[12px] text-muted">{shortAddr(me)}</div>
+    <div className="flex items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3">
+      <span className="size-9 shrink-0 rounded-full bg-[conic-gradient(from_200deg,#93c5fd,#2563eb,#a5b4fc,#93c5fd)] ring-2 ring-white" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="text-[13.5px] font-medium">{role === "owner" ? "Owner" : "Guardian"}</div>
+        <div className="font-mono text-[11.5px] text-muted">{shortAddr(me)}</div>
       </div>
-      <span className="text-[11px] text-faint">Devnet</span>
+      <Network />
     </div>
+  );
+}
+
+function Network() {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[11px] text-muted ring-1 ring-line">
+      <span className="size-1.5 rounded-full bg-safe" /> Devnet
+    </span>
   );
 }
 
 function MobileTop() {
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-ink/95 px-4 backdrop-blur-sm lg:hidden">
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur-md lg:hidden">
       <Link to="/" className="text-fg" aria-label="Argus home">
-        <Logo size={24} />
+        <Wordmark size={22} />
       </Link>
+      <Network />
     </header>
   );
 }
@@ -82,11 +92,11 @@ function MobileTop() {
 function TabBar() {
   const { pathname } = useLocation();
   return (
-    <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-ink/95 backdrop-blur-sm lg:hidden" aria-label="App">
+    <nav className="pb-safe fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-white/90 backdrop-blur-md lg:hidden" aria-label="App">
       {NAV.map((n) => {
         const active = n.end ? pathname === n.to : pathname.startsWith(n.to);
         return (
-          <NavLink key={n.to} to={n.to} end={n.end} className={`flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10.5px] transition-colors ${active ? "text-fg" : "text-faint"}`}>
+          <NavLink key={n.to} to={n.to} end={n.end} className={`flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1 text-[10.5px] transition-colors ${active ? "font-medium text-brand" : "text-faint"}`}>
             <Icon name={n.icon} size={20} />
             {n.label}
           </NavLink>
@@ -129,10 +139,10 @@ function Toasts() {
 /** Page title block. No border, generous space. */
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mx-auto flex max-w-[880px] flex-col gap-4 px-5 pt-8 pb-2 sm:flex-row sm:items-end sm:justify-between sm:px-8 lg:pt-14">
+    <div className="mx-auto flex max-w-[880px] flex-col gap-4 px-5 pt-8 pb-2 sm:flex-row sm:items-end sm:justify-between sm:px-8 lg:pt-16">
       <div className="min-w-0">
-        <h1 className="text-[26px] font-semibold tracking-[-0.02em] sm:text-[30px]">{title}</h1>
-        {subtitle && <div className="mt-2 max-w-[36rem] text-[15px] leading-relaxed text-muted">{subtitle}</div>}
+        <h1 className="font-serif text-[36px] leading-[1.05] tracking-[-0.01em] sm:text-[44px]">{title}</h1>
+        {subtitle && <div className="mt-3 max-w-[36rem] text-[15px] leading-relaxed text-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
     </div>

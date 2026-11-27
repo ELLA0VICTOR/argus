@@ -6,6 +6,12 @@ import { formatAmount, formatDuration, shortAddr } from "../../lib/format";
 import { Container, PageHeader } from "../Shell";
 import { useVault, type SendPath } from "../store";
 
+const ROUTES: { id: SendPath; label: string; hint: string }[] = [
+  { id: "instant", label: "Instant", hint: "Within today's allowance" },
+  { id: "trusted", label: "Trusted", hint: "To an address you trust" },
+  { id: "delayed", label: "Waits", hint: "Cancellable until it leaves" },
+];
+
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /** "12.5" → 12_500_000n (6 decimals). null if invalid. */
@@ -106,7 +112,7 @@ export default function Send() {
     <>
       <PageHeader title="Send" />
       <Container>
-        <div className="max-w-[560px]">
+        <div className="max-w-[600px] rounded-[28px] border border-line bg-white p-6 shadow-[0_24px_60px_-40px_rgba(23,37,84,0.35)] sm:p-8">
           {/* amount */}
           <label className="block">
             <span className="text-[13.5px] text-muted">Amount</span>
@@ -162,20 +168,33 @@ export default function Send() {
             </div>
           )}
 
-          {/* what happens */}
-          <div className="mt-10 min-h-[52px] border-t border-line pt-5">
-            {error ? (
-              <p className="text-[14px] text-threat-soft">{error}</p>
-            ) : explain ? (
-              <p key={path} className="fade-in text-[15px]">
-                {explain}
-              </p>
-            ) : (
-              <p className="text-[14px] text-muted">Argus tells you how it'll go before you sign anything.</p>
-            )}
+          {/* how it'll go */}
+          <div className="mt-10 rounded-2xl bg-panel p-4">
+            <div className="grid grid-cols-3 gap-1.5" aria-hidden="true">
+              {ROUTES.map((r) => {
+                const on = path === r.id;
+                return (
+                  <div key={r.id} className={`rounded-xl px-2.5 py-2.5 transition-all sm:px-3 duration-300 ${on ? "bg-white shadow-[0_6px_20px_-10px_rgba(23,37,84,0.35)] ring-1 ring-line" : ""}`}>
+                    <div className={`text-[13px] font-medium ${on ? (r.id === "delayed" ? "text-wait" : "text-fg") : "text-faint"}`}>{r.id === "delayed" ? `Waits ${formatDuration(vault.delay)}` : r.label}</div>
+                    <div className={`mt-0.5 hidden text-[12px] leading-snug sm:block ${on ? "text-muted" : "text-faint/80"}`}>{r.hint}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-3 min-h-[22px] px-1">
+              {error ? (
+                <p className="text-[14px] text-threat-soft">{error}</p>
+              ) : explain ? (
+                <p key={path} className="fade-in text-[14.5px]">
+                  {explain}
+                </p>
+              ) : (
+                <p className="text-[14px] text-muted">Argus tells you how it'll go before you sign anything.</p>
+              )}
+            </div>
           </div>
 
-          <div className="mt-6 flex gap-2">
+          <div className="mt-7 flex gap-2">
             {!review ? (
               <Button variant="primary" size="lg" disabled={!path || !!error} onClick={() => setReview(true)}>
                 Continue
