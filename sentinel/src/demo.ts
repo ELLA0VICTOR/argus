@@ -18,6 +18,7 @@ const VAULT_FUNDS = 12_000n * UNIT;
 const DAILY_LIMIT = 100n * UNIT;
 const DELAY = 86_400;
 const SESSION_TTL_MS = 45 * 60_000;
+const CALL_TIMEOUT_SECS = 90;
 
 const funder = loadKey("funder");
 const ai = loadKey("ai-guardian");
@@ -45,6 +46,8 @@ export type DemoEvent = { t: number } & (
   | { type: "attack"; kind: AttackKind; ok: boolean; sig?: string; error?: { code: number | null; name: string; msg: string } }
   | { type: "risk"; score: number; level: string; reason: string; signals: { label: string; weight: number }[] }
   | { type: "call"; who: "argus" | "owner"; text: string; status?: "ringing" | "connected" | "ended" }
+  | { type: "incoming"; amount: string; reason: string; timeoutSecs: number }
+  | { type: "decision"; decision: "cancel" | "allow" | "timeout"; via: "voice" | "button" | "timeout" }
   | { type: "state"; vault: string; thief: string; frozen: boolean; pending: number }
 );
 
@@ -64,6 +67,10 @@ interface Session {
   pending: Map<string, { kind: AttackKind; tx: Transaction; expires: number }>;
   handled: Set<string>;
   busy: boolean;
+  /** Resolves the owner's answer on the call: "cancel" or "allow". */
+  decide?: (d: "cancel" | "allow") => void;
+  /** Call context for the voice agent (amount, reason). */
+  callContext?: { amount: string; reason: string };
 }
 
 const sessions = new Map<string, Session>();
@@ -322,15 +329,25 @@ async function react(s: Session) {
     emit(s, { type: "risk", score, level, reason, signals });
     if (score < 45) return;
 
-    // The call. Simulated on screen in this demo; the product places a real phone call.
-    emit(s, { type: "call", who: "argus", status: "ringing", text: "Calling the vault owner…" });
-    await sleep(1800);
-    emit(s, { type: "call", who: "argus", status: "connected", text: `Hi, it's Argus, guarding your Savings vault. ${fmt(amount)} dUSDC is about to leave for a brand-new address. Was this you?` });
-    await sleep(3000);
-    emit(s, { type: "call", who: "owner", text: "No! That's not me. Cancel it." });
-    await sleep(1400);
-    emit(s, { type: "call", who: "argus", status: "ended", text: "Cancelling it now, and freezing the vault so nothing else can leave." });
-    await sleep(900);
+    // The call. The page rings the visitor, who now plays the real owner, and
+    // connects them to the Argus voice agent (ElevenLabs). The owner's answer
+    // comes back through `decide`. With no answer, critical risk means Argus
+    // cancels anyway.
+    s.callContext = { amount: `${fmt(amount)} dUSDC`, reason };
+    emit(s, { type: "incoming", amount: s.callContext.amount, reason, timeoutSecs: CALL_TIMEOUT_SECS });
+    const decision = await new Promise<"cancel" | "allow" | "timeout">((resolve) => {
+      const t = setTimeout(() => resolve("timeout"), CALL_TIMEOUT_SECS * 1000);
+      s.decide = (d) => {
+        clearTimeout(t);
+        resolve(d);
+      };
+    });
+    s.decide = undefined;
+    if (decision === "allow") {
+      emit(s, { type: "log", text: "The owner confirmed the withdrawal was theirs. It will go through after the 24-hour wait, unless a guardian cancels it.", tone: "wait" });
+      return;
+    }
+    if (decision === "timeout") emit(s, { type: "log", text: "No answer. The risk is critical, so Argus is cancelling anyway.", tone: "threat" });
 
     // Cancel and freeze, signed only by the AI guardian key (it can do nothing else).
     const program = programFor(ai);
@@ -351,6 +368,19 @@ async function react(s: Session) {
   } finally {
     s.busy = false;
   }
+}
+
+/**
+ * The owner's answer on the call, from the voice agent's tool call or the
+ * Cancel button. Only meaningful while Argus is waiting on this session's call.
+ */
+export function decide(id: string, decision: "cancel" | "allow", via: "voice" | "button") {
+  const s = sessions.get(id);
+  if (!s) throw new DemoError(404, "This demo has expired. Start a new one.");
+  if (!s.decide) throw new DemoError(409, "There's no call waiting for an answer.");
+  emit(s, { type: "decision", decision, via });
+  s.decide(decision);
+  return { ok: true };
 }
 
 /**

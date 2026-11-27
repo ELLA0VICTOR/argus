@@ -11,6 +11,17 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - **Demo vault address:** _not created yet_
 
 ## Log
+- 2026-11-27 — Claude — **The Argus voice agent is live (ElevenLabs).**
+  - **Agent:** `agent_3001m8ebdd1ee1yrp9ga4kcn2436` ("Argus Guardian", voice "Hope"). It's a public agent id, not a secret.
+  - **Tools:**
+    - client tools `cancel_withdrawal` (`tool_2801m8ebcw77fzdsmygyfcty8p6z`) and `allow_withdrawal` (`tool_0401m8ebcwqxecg9e63nthhhg5sy`);
+    - the built-in `end_call`.
+  - **Dynamic variables** to pass when starting a session: `owner_name`, `vault_name`, `amount`, `destination`, `reason`.
+  - **Behaviour:** it never asks for keys or seed phrases. It cancels on "no" or any doubt, and double-checks before allowing.
+  - **Sentinel flow:** after scoring, Sentinel emits `incoming`, then waits up to 90s for `POST /v1/demo/:id/decision {decision, via}`. With no answer, it cancels anyway (critical risk).
+  - **Web:** `/demo` rings, then Answer starts `Conversation.startSession` (WebRTC), the tool → `/decision`, then the on-chain cancel and freeze. Verified in headless Chrome: the agent connected and spoke with the live amount. Its text-mode decisions are correct.
+  - **Next:** a real outbound phone call via a Twilio number on the same agent. Victor is setting up Twilio.
+  - **Codex:** the mobile app can use the same agent for an in-app call (`@elevenlabs/react-native`), or rely on push plus the phone call.
 - 2026-11-27 — Claude — **Sentinel v0 and the live "steal my wallet" demo work end to end on devnet.**
   - **Code:** `sentinel/`, Node 24 with built-in HTTP. Run with `npm run dev` (port 8787). Its keys are in `sentinel/keys/` (gitignored), and the RPC URL is in `sentinel/.env` (gitignored).
   - **Public keys:**

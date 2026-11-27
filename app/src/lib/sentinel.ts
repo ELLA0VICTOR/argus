@@ -28,6 +28,8 @@ export type DemoEvent = { t: number } & (
   | { type: "risk"; score: number; level: string; reason: string; signals: { label: string; weight: number }[] }
   | { type: "call"; who: "argus" | "owner"; text: string; status?: "ringing" | "connected" | "ended" }
   | { type: "state"; vault: string; thief: string; frozen: boolean; pending: number }
+  | { type: "incoming"; amount: string; reason: string; timeoutSecs: number }
+  | { type: "decision"; decision: "cancel" | "allow" | "timeout"; via: "voice" | "button" | "timeout" }
 );
 
 export type AttackResult = { ok: true; sig: string } | { ok: false; error: { code: number | null; name: string; msg: string } };
@@ -57,6 +59,10 @@ export async function attack(session: DemoSession, kind: AttackKind): Promise<At
   const signature = nacl.sign.detached(message, bs58.decode(session.stolenKey));
   return call<AttackResult>(`/v1/demo/${session.session}/attack/${p.nonce}`, { signature: bs58.encode(signature) });
 }
+
+/** The owner's answer to Argus's call: from the voice agent's tool, or a button. */
+export const decide = (session: string, decision: "cancel" | "allow", via: "voice" | "button") =>
+  call<{ ok: true }>(`/v1/demo/${session}/decision`, { decision, via });
 
 export function streamEvents(session: string, onEvent: (e: DemoEvent) => void): () => void {
   const es = new EventSource(`${SENTINEL_URL}/v1/demo/${session}/events`);

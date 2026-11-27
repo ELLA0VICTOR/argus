@@ -4,6 +4,7 @@ import { Wordmark } from "../components/Logo";
 import { Icon } from "../components/Icon";
 import { explorerAddr, explorerTx, shortAddr } from "../lib/format";
 import { attack, startDemo, streamEvents, type AttackKind, type AttackResult, type DemoEvent, type DemoSession } from "../lib/sentinel";
+import { IncomingCall } from "./IncomingCall";
 
 /**
  * "Steal my wallet": a live devnet heist. The visitor gets a real vault's owner
@@ -117,7 +118,7 @@ export default function DemoPage() {
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Thief session={session} state={state} moves={moves} onPlay={play} frozen={!!state?.frozen} />
-            <ArgusPanel events={events} stopped={stopped} />
+            <ArgusPanel session={session.session} events={events} stopped={stopped} />
           </div>
         </section>
       )}
@@ -227,12 +228,14 @@ function Balance({ label, value, accent }: { label: string; value: string; accen
 
 /* --------------------------------------------------------------- argus */
 
-function ArgusPanel({ events, stopped }: { events: DemoEvent[]; stopped: boolean }) {
+function ArgusPanel({ session, events, stopped }: { session: string; events: DemoEvent[]; stopped: boolean }) {
   const risk = [...events].reverse().find((e) => e.type === "risk") as Extract<DemoEvent, { type: "risk" }> | undefined;
-  const calls = events.filter((e) => e.type === "call") as Extract<DemoEvent, { type: "call" }>[];
-  const lastCall = calls.at(-1);
+  const incoming = [...events].reverse().find((e) => e.type === "incoming") as Extract<DemoEvent, { type: "incoming" }> | undefined;
+  const decision = [...events].reverse().find((e) => e.type === "decision") as Extract<DemoEvent, { type: "decision" }> | undefined;
+  const timedOut = events.some((e) => e.type === "log" && e.text.startsWith("No answer"));
+  const decided = decision?.decision ?? (timedOut ? "timeout" : null);
   const feed = events.filter((e) => e.type === "log" || e.type === "tx");
-  const status = stopped ? "stopped" : lastCall && lastCall.status !== "ended" ? "calling" : risk ? "threat" : events.some((e) => e.type === "log" && e.tone === "wait") ? "checking" : "watching";
+  const status = stopped ? "stopped" : incoming && !decided ? "calling" : risk ? "threat" : events.some((e) => e.type === "log" && e.tone === "wait") ? "checking" : "watching";
   const feedRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
@@ -289,30 +292,9 @@ function ArgusPanel({ events, stopped }: { events: DemoEvent[]; stopped: boolean
         </div>
       )}
 
-      {calls.length > 0 && (
-        <div className="enter mt-4 rounded-2xl bg-[#2a2d33] p-4 text-white">
-          <div className="flex items-center justify-between text-[13px] text-white/75">
-            <span className="flex items-center gap-2">
-              <Icon name="phone" size={14} /> {lastCall?.status === "ended" ? "Call ended" : lastCall?.status === "ringing" ? "Ringing the owner…" : "On the call"}
-            </span>
-            {lastCall?.status !== "ended" && (
-              <span className="flex h-4 items-center gap-[3px]" aria-hidden="true">
-                {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <span key={i} className="animate-wave h-4 w-[2px] rounded-full bg-white/90" style={{ animationDelay: `${i * 110}ms` }} />
-                ))}
-              </span>
-            )}
-          </div>
-          <div className="mt-3 space-y-2">
-            {calls
-              .filter((c) => c.status !== "ringing")
-              .map((c, i) => (
-                <div key={i} className={`enter flex ${c.who === "owner" ? "justify-end" : ""}`}>
-                  <div className={`max-w-[88%] rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed ${c.who === "owner" ? "bg-[#2563eb]" : "bg-white/10"}`}>{c.text}</div>
-                </div>
-              ))}
-          </div>
-          <div className="mt-3 text-[11.5px] text-white/45">Simulated call for this demo. In Argus, this is a real phone call to the owner.</div>
+      {incoming && (
+        <div className="mt-4">
+          <IncomingCall session={session} amount={incoming.amount} reason={incoming.reason} timeoutSecs={incoming.timeoutSecs} startedAt={incoming.t} decided={decided} />
         </div>
       )}
 

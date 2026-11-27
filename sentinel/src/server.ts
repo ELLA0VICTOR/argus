@@ -3,7 +3,7 @@
 // The full client API is specified in docs/SENTINEL-API.md.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { PROGRAM_ID } from "./chain.ts";
-import { createSession, DemoError, demoPublic, ensureMint, prepareAttack, startWatcher, submitAttack, subscribe, type AttackKind } from "./demo.ts";
+import { createSession, decide, DemoError, demoPublic, ensureMint, prepareAttack, startWatcher, submitAttack, subscribe, type AttackKind } from "./demo.ts";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
@@ -83,6 +83,13 @@ const server = createServer(async (req, res) => {
           unsub();
         });
         return;
+      }
+      // POST /v1/demo/:id/decision  { decision: "cancel" | "allow", via: "voice" | "button" }
+      if (req.method === "POST" && parts[3] === "decision" && parts.length === 4) {
+        const body = await readJson(req);
+        const d = body.decision === "allow" ? "allow" : body.decision === "cancel" ? "cancel" : null;
+        if (!d) throw new DemoError(400, "decision must be cancel or allow");
+        return json(res, 200, decide(id, d, body.via === "voice" ? "voice" : "button"));
       }
       // POST /v1/demo/:id/attack                 { kind }
       // POST /v1/demo/:id/attack/:nonce          { signature }

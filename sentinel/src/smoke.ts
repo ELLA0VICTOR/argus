@@ -35,7 +35,7 @@ const ctrl = new AbortController();
       if (!line) continue;
       const e = JSON.parse(line.slice(6));
       events.push(e);
-      const d = e.type === "log" ? e.text : e.type === "tx" ? `${e.label} ${e.sig.slice(0, 12)}…` : e.type === "risk" ? `${e.level} ${e.score}` : e.type === "call" ? `${e.who}: ${e.text}` : e.type === "attack" ? `${e.kind} ok=${e.ok} ${e.error?.name ?? ""}` : e.type === "state" ? `vault ${e.vault} thief ${e.thief} frozen ${e.frozen} pending ${e.pending}` : "";
+      const d = e.type === "log" ? e.text : e.type === "tx" ? `${e.label} ${e.sig.slice(0, 12)}…` : e.type === "risk" ? `${e.level} ${e.score}` : e.type === "call" ? `${e.who}: ${e.text}` : e.type === "attack" ? `${e.kind} ok=${e.ok} ${e.error?.name ?? ""}` : e.type === "incoming" ? `ringing: ${e.amount}` : e.type === "decision" ? `${e.decision} via ${e.via}` : e.type === "state" ? `vault ${e.vault} thief ${e.thief} frozen ${e.frozen} pending ${e.pending}` : "";
       console.log(`  [event ${e.type}] ${d}`);
     }
   }
@@ -63,7 +63,13 @@ expect(allowance.ok, "daily allowance (100) goes through");
 const req = await attack("request");
 expect(req.ok, "withdrawal request of everything lands");
 
-// Wait for Argus to react (score, call, cancel, freeze).
+// Argus rings the owner. Answer with "cancel" (the button path; voice uses the same endpoint).
+const ringBy = Date.now() + 40_000;
+while (Date.now() < ringBy && !events.some((e) => e.type === "incoming")) await new Promise((r) => setTimeout(r, 500));
+expect(events.some((e) => e.type === "incoming"), "Argus rang the owner");
+await post(`/v1/demo/${s.session}/decision`, { decision: "cancel", via: "button" });
+
+// Wait for Argus to react (cancel, freeze).
 const deadline = Date.now() + 60_000;
 while (Date.now() < deadline && !events.some((e) => e.type === "tx" && String(e.label).startsWith("Vault frozen"))) {
   await new Promise((r) => setTimeout(r, 1000));

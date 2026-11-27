@@ -42,7 +42,7 @@
 | --- | --- |
 | **Program (devnet)** | [`4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`](https://explorer.solana.com/address/4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh?cluster=devnet) |
 | **Web app** | Run locally (see [Getting started](#getting-started)). The hosted link will be added here when it's deployed. |
-| **"Steal my wallet" demo** | `/demo` in the web app. You get a fresh devnet vault holding 12,000 test dollars, plus its real owner key. Try to drain it: every move is a real transaction against the program, and Argus stops you live (scores the request, "calls" the owner, then cancels and freezes on-chain with its cancel-only key). No wallet or sign-up needed. |
+| **"Steal my wallet" demo** | `/demo` in the web app. You get a fresh devnet vault holding 12,000 test dollars, plus its real owner key. Try to drain it: every move is a real transaction against the program, and Argus stops you live. It scores the request, then calls you as the owner: a real AI voice call in the browser (ElevenLabs). Say "cancel", and it cancels and freezes on-chain with its cancel-only key. No wallet or sign-up needed. |
 | **Android app** | [`mobile/`](mobile/). The APK link will be added here when the build is published. |
 
 > **Devnet only.** Argus has not been audited by a third party. Use test tokens.
@@ -152,6 +152,7 @@ flowchart LR
 | Web | React 19, TypeScript 7, Vite 8, Tailwind CSS 4, React Router 7 |
 | Mobile | Expo SDK 58, React Native 0.88, Solana Mobile Wallet Adapter 3 |
 | Sentinel | Node 24 (built-in HTTP and TypeScript), @coral-xyz/anchor, @solana/web3.js, Server-Sent Events |
+| Voice | ElevenLabs Agents (Argus Guardian agent, client tools `cancel_withdrawal` / `allow_withdrawal`), `@elevenlabs/client` |
 | RPC | Helius (devnet) |
 
 ## Getting started
@@ -200,16 +201,210 @@ See [`mobile/README.md`](mobile/README.md).
 
 ## Repository structure
 
+Build output, dependencies, keys and `.env` files are gitignored. Font files and raw audit-run artifacts are omitted below. Regenerate this tree with `python scripts/readme-tree.py`.
+
 ```
 argus/
-├── programs/argus/        Anchor program
-│   ├── src/               instructions, state, governance, errors, events
-│   └── tests/             148 LiteSVM tests, including attack and fuzz tests
-├── app/                   web app: landing page, vault app, live demo
-├── sentinel/              AI guardian service: watches vaults, scores, cancels; runs the live demo
-├── mobile/                Android app (Expo + Mobile Wallet Adapter)
-├── scripts/               IDL export
-└── docs/                  spec, threat model, audits, design, API contract
+├── app/                               # web app (React + Vite + Tailwind)
+│   ├── public/
+│   │   ├── img/
+│   │   │   ├── hero-dawn-640.webp
+│   │   │   └── hero-dawn.webp
+│   │   └── favicon.svg
+│   ├── src/
+│   │   ├── app/                       # vault app: shell, store, pages
+│   │   │   ├── pages/
+│   │   │   │   ├── Activity.tsx
+│   │   │   │   ├── Guardians.tsx
+│   │   │   │   ├── Overview.tsx
+│   │   │   │   ├── Rules.tsx
+│   │   │   │   └── Send.tsx
+│   │   │   ├── AppRoot.tsx
+│   │   │   ├── parts.tsx
+│   │   │   ├── Shell.tsx
+│   │   │   └── store.tsx
+│   │   ├── components/
+│   │   │   ├── Icon.tsx
+│   │   │   ├── Logo.tsx
+│   │   │   └── ui.tsx
+│   │   ├── demo/                      # "steal my wallet" live demo
+│   │   │   ├── DemoPage.tsx
+│   │   │   └── IncomingCall.tsx
+│   │   ├── idl/                       # program IDL + TS types (scripts/export-idl.mjs)
+│   │   │   ├── argus.json
+│   │   │   └── argus.ts
+│   │   ├── landing/                   # landing page and product replay
+│   │   │   ├── Landing.tsx
+│   │   │   └── ProductShot.tsx
+│   │   ├── lib/                       # config, formatting, hooks, Sentinel client
+│   │   │   ├── config.ts
+│   │   │   ├── format.ts
+│   │   │   ├── hooks.ts
+│   │   │   └── sentinel.ts
+│   │   ├── index.css
+│   │   └── main.tsx
+│   ├── .env.example
+│   ├── .oxlintrc.json
+│   ├── index.html
+│   ├── package.json
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── docs/                              # spec, threat model, audits, design, API contract
+│   ├── assets/
+│   │   └── argus.svg
+│   ├── audits/                        # internal audit rounds + devnet verification
+│   │   ├── claude-r1.md
+│   │   ├── codex-devnet-2026-11-27.md
+│   │   ├── codex-r1-manifest-final.json
+│   │   ├── codex-r1-manifest.json
+│   │   ├── codex-r1-reconciliation.md
+│   │   └── codex-r1.md
+│   ├── AUDIT-CHECKLIST.md
+│   ├── CONTEXT.md
+│   ├── DEMO-SCRIPT.md
+│   ├── DESIGN.md
+│   ├── HANDOFF.md
+│   ├── MOBILE.md
+│   ├── PROGRAM-SPEC.md
+│   ├── SENTINEL-API.md
+│   └── THREAT-MODEL.md
+├── mobile/                            # Android app (Expo + Mobile Wallet Adapter)
+│   ├── assets/
+│   │   ├── adaptive-icon.png
+│   │   ├── hero-dawn.webp
+│   │   ├── icon.png
+│   │   ├── icon.svg
+│   │   └── notification-icon.png
+│   ├── scripts/
+│   │   ├── brand-assets.mjs
+│   │   └── smoke-sentinel.ts
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── DawnHero.tsx
+│   │   │   ├── Intro.tsx
+│   │   │   ├── SignalIcon.tsx
+│   │   │   ├── TransactionNotice.tsx
+│   │   │   └── ui.tsx
+│   │   ├── domain/
+│   │   │   ├── demo.test.ts
+│   │   │   └── demo.ts
+│   │   ├── idl/
+│   │   │   ├── argus.json
+│   │   │   ├── argus.ts
+│   │   │   └── README.md
+│   │   ├── program/
+│   │   │   ├── bundle-check.ts
+│   │   │   ├── client.test.ts
+│   │   │   ├── client.ts
+│   │   │   ├── errors.test.ts
+│   │   │   ├── errors.ts
+│   │   │   ├── node-files-unavailable.ts
+│   │   │   ├── read.ts
+│   │   │   ├── runtime.ts
+│   │   │   ├── transactions.test.ts
+│   │   │   └── transactions.ts
+│   │   ├── screens/
+│   │   │   ├── Alert.tsx
+│   │   │   ├── Alerts.tsx
+│   │   │   ├── Connect.tsx
+│   │   │   ├── Guardians.tsx
+│   │   │   ├── LiveApp.tsx
+│   │   │   ├── LiveDemo.tsx
+│   │   │   ├── Pending.tsx
+│   │   │   ├── SentinelVault.tsx
+│   │   │   ├── Settings.tsx
+│   │   │   └── Vault.tsx
+│   │   ├── sentinel/
+│   │   │   ├── client.ts
+│   │   │   ├── demo.test.ts
+│   │   │   ├── demo.ts
+│   │   │   ├── demoRuntime.ts
+│   │   │   ├── mock.ts
+│   │   │   ├── rules.ts
+│   │   │   ├── runtime.ts
+│   │   │   ├── sentinel.test.ts
+│   │   │   ├── types.ts
+│   │   │   └── useResource.ts
+│   │   ├── services/
+│   │   │   ├── demoEvents.ts
+│   │   │   ├── notifications.ts
+│   │   │   └── wallet.ts
+│   │   ├── polyfills.ts
+│   │   └── theme.ts
+│   ├── .env.example
+│   ├── app.config.ts
+│   ├── app.json
+│   ├── App.tsx
+│   ├── eas.json
+│   ├── index.ts
+│   ├── metro.config.cjs
+│   ├── package.json
+│   ├── README.md
+│   └── tsconfig.json
+├── programs/
+│   └── argus/                         # Anchor program
+│       ├── src/                       # instructions, state, governance, errors, events
+│       │   ├── instructions/
+│       │   │   ├── approve.rs
+│       │   │   ├── cancel_withdrawal.rs
+│       │   │   ├── close_proposal.rs
+│       │   │   ├── deposit.rs
+│       │   │   ├── emergency_sweep.rs
+│       │   │   ├── execute_proposal.rs
+│       │   │   ├── execute_withdrawal.rs
+│       │   │   ├── freeze.rs
+│       │   │   ├── initialize_vault.rs
+│       │   │   ├── propose.rs
+│       │   │   ├── request_withdrawal.rs
+│       │   │   ├── shared.rs
+│       │   │   ├── veto.rs
+│       │   │   ├── withdraw_instant.rs
+│       │   │   └── withdraw_trusted.rs
+│       │   ├── constants.rs
+│       │   ├── error.rs
+│       │   ├── events.rs
+│       │   ├── governance.rs
+│       │   ├── instructions.rs
+│       │   ├── lib.rs
+│       │   └── state.rs
+│       ├── tests/                     # 148 LiteSVM tests (attack, rollback, fuzz)
+│       │   ├── common/
+│       │   │   └── mod.rs
+│       │   ├── deposit.rs
+│       │   ├── fuzz.rs
+│       │   ├── governance.rs
+│       │   ├── initialize_vault.rs
+│       │   ├── protective.rs
+│       │   ├── rollback.rs
+│       │   ├── withdraw_instant.rs
+│       │   ├── withdraw_trusted.rs
+│       │   └── withdrawals.rs
+│       └── Cargo.toml
+├── scripts/                           # IDL export, README tree
+│   ├── export-idl.mjs
+│   └── readme-tree.py
+├── sentinel/                          # AI guardian service: demo, watcher, call, cancel/freeze
+│   ├── src/
+│   │   ├── chain.ts
+│   │   ├── demo.ts
+│   │   ├── keys.ts
+│   │   ├── server.ts
+│   │   ├── setup-keys.ts
+│   │   └── smoke.ts
+│   ├── demo-config.json
+│   ├── package.json
+│   └── tsconfig.json
+├── AGENTS.md
+├── Anchor.toml
+├── Cargo.lock
+├── Cargo.toml
+├── CLAUDE.md
+├── PLAN.md
+├── README.md
+├── rust-toolchain.toml
+└── security.json
 ```
 
 ## Security
@@ -238,6 +433,8 @@ argus/
 | Web: landing page and vault app | ✅ Built (sample vault) |
 | Web: "steal my wallet" live demo | ✅ Live on devnet (Sentinel cancels and freezes on-chain) |
 | Sentinel: demo, watcher, cancel and freeze | ✅ Running locally |
-| Sentinel: real phone calls (ElevenLabs), scam lookups, hosting | ⏳ Next |
+| Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
+| Real outbound phone call (Twilio + ElevenLabs) | ⏳ Waiting on the Twilio number |
+| Sentinel: scam lookups, hosting | ⏳ Next |
 | Web: wallet connection and live devnet data | ⏳ Next |
 | Android app | 🔨 In progress |

@@ -10,3 +10,6 @@ export const DAPP_STORE_URL: string | null = null;
 export const REPO_URL: string | null = "https://github.com/ELLA0VICTOR/argus";
 
 export const TEST_COUNT = 148;
+
+/** The Argus voice agent (ElevenLabs). A public agent id, not a secret. */
+export const ELEVENLABS_AGENT_ID: string = (import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined) ?? "agent_3001m8ebdd1ee1yrp9ga4kcn2436";
