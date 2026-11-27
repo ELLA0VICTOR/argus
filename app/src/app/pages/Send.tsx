@@ -32,7 +32,7 @@ export default function Send() {
 
   const amount = parseAmount(amountStr, vault.decimals);
   const remaining = vault.dailyLimit > vault.spentInWindow ? vault.dailyLimit - vault.spentInWindow : 0n;
-  const trusted = vault.trusted.find((t) => t.wallet === dest.trim());
+  const trusted = vault.trusted.find((t) => t.wallet === dest.trim() && t.activeAt <= Date.now() / 1000);
   const destValid = BASE58.test(dest.trim());
 
   const path: SendPath | null = useMemo(() => {

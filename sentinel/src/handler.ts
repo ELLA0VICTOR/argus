@@ -4,7 +4,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { PROGRAM_ID, connection } from "./chain.ts";
 import { checkDb, describeError } from "./db.ts";
-import { createSession, decide, DemoError, demoPublic, eventsAfter, load, phoneReady, prepareAttack, relayCall, submitAttack, tick, type AttackKind } from "./demo.ts";
+import { faucet } from "./faucet.ts";
+import { relayRpc } from "./rpc.ts";
+import { createSession, decide, DemoError, demoPublic, ensureMint, eventsAfter, load, phoneReady, prepareAttack, relayCall, submitAttack, tick, type AttackKind } from "./demo.ts";
 
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
 
@@ -14,7 +16,8 @@ function cors(req: IncomingMessage, res: ServerResponse) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    // solana-client: sent by @solana/web3.js on every RPC call (the /v1/rpc relay).
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, solana-client");
   }
 }
 
@@ -114,7 +117,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
   try {
     if (req.method === "GET" && url.pathname === "/v1/health") {
-      const base = { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, version: "0.1.0" };
+      const base = { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, test_mint: (await ensureMint()).toBase58(), version: "0.1.0" };
       // ?deep=1 also checks the database (host only, never credentials).
       if (url.searchParams.get("deep") === "1") {
         const [db, rpc] = await Promise.all([
@@ -127,6 +130,20 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
         return json(res, db.ok && rpc.ok ? 200 : 503, { ...base, ok: db.ok && rpc.ok, db, rpc });
       }
       return json(res, 200, base);
+    }
+
+    // POST /v1/rpc/devnet  JSON-RPC (single or batch), relayed to the private RPC with an allowlist.
+    // "devnet" is in the path on purpose: wallet adapters pick the network from the RPC URL,
+    // and without it they'd assume mainnet.
+    if (req.method === "POST" && (url.pathname === "/v1/rpc/devnet" || url.pathname === "/v1/rpc")) {
+      const r = await relayRpc(await readJson(req), clientIp(req));
+      return json(res, r.status, r.json);
+    }
+
+    // POST /v1/faucet  { wallet }  → 1,000 test dUSDC (and a little SOL for fees if needed)
+    if (req.method === "POST" && url.pathname === "/v1/faucet") {
+      const body = await readJson(req);
+      return json(res, 200, await faucet(String(body.wallet ?? ""), clientIp(req)));
     }
 
     if (parts[0] === "v1" && parts[1] === "demo") {

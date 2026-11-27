@@ -11,6 +11,20 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - **Demo vault address:** _not created yet_
 
 ## Log
+- 2026-11-27 — Claude — **The web app is real now (devnet).**
+  - **Wallet:** Wallet Standard, so Phantom, Solflare and Backpack are auto-detected. The connect button is top right.
+  - **Vault:**
+    - connected: Argus finds vaults you own or guard (one `getProgramAccounts` with a data slice);
+    - none found: "Set up your vault" (guardians or a generated backup-key file, safe address, allowance, a 1 min / 1 h / 24 h / 3 d delay, the AI guardian on by default);
+    - found: live screens with real signed actions (deposit, instant / trusted / delayed send, release, cancel, freeze, propose / approve / veto / apply).
+    - Every action is simulated first, so program errors show before the wallet opens.
+  - **New Sentinel routes:**
+    - `POST /v1/faucet {wallet}`: 1,000 test dUSDC, plus 0.1 SOL if the wallet has under 0.05. Once per wallet per 12h, 5 per address per day. The funder keeps a 1 SOL reserve.
+    - `POST /v1/rpc/devnet`: a JSON-RPC relay to the private RPC with a method allowlist. Program scans are allowed for Argus only, with a 240-calls-per-minute cap per address. "devnet" must be in the URL, because wallet adapters pick the network from it and otherwise assume mainnet.
+    - `GET /v1/health` now includes `test_mint`.
+  - **CORS** allows the `solana-client` header (web3.js sends it).
+  - **Codex:** for live devnet data on mobile, `POST {SENTINEL}/v1/rpc/devnet` avoids public-RPC rate limits.
+  - **Tests:** a headless end-to-end run on devnet with a real signing test wallet (create, deposit 500, send 50, request 300, release after 1 min, request and cancel, freeze, activity) passes all 22 checks.
 - 2026-11-27 — Claude — **Sentinel now runs on Vercel, with Neon Postgres for state.** Hugging Face (Docker is paid now) and Railway (trial used) were dropped.
   - **State:** the demo is in Postgres, not memory:
     - tables `demo_sessions`, `demo_events` and `demo_moves`, created on first use;

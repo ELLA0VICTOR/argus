@@ -215,6 +215,10 @@ argus/
 │   │   └── favicon.svg
 │   ├── src/
 │   │   ├── app/                       # vault app: shell, store, pages
+│   │   │   ├── live/
+│   │   │   │   ├── CreateVault.tsx
+│   │   │   │   ├── LiveVault.tsx
+│   │   │   │   └── program.ts
 │   │   │   ├── pages/
 │   │   │   │   ├── Activity.tsx
 │   │   │   │   ├── Guardians.tsx
@@ -224,7 +228,8 @@ argus/
 │   │   │   ├── AppRoot.tsx
 │   │   │   ├── parts.tsx
 │   │   │   ├── Shell.tsx
-│   │   │   └── store.tsx
+│   │   │   ├── store.tsx
+│   │   │   └── wallet.tsx
 │   │   ├── components/
 │   │   │   ├── Icon.tsx
 │   │   │   ├── Logo.tsx
@@ -244,6 +249,7 @@ argus/
 │   │   │   ├── config.ts
 │   │   │   ├── format.ts
 │   │   │   ├── hooks.ts
+│   │   │   ├── polyfills.ts
 │   │   │   └── sentinel.ts
 │   │   ├── index.css
 │   │   └── main.tsx
@@ -262,6 +268,7 @@ argus/
 │   ├── audits/                        # internal audit rounds + devnet verification
 │   │   ├── claude-r1.md
 │   │   ├── codex-devnet-2026-11-27.md
+│   │   ├── codex-mobile-apk-2026-11-27.json
 │   │   ├── codex-r1-manifest-final.json
 │   │   ├── codex-r1-manifest.json
 │   │   ├── codex-r1-reconciliation.md
@@ -285,6 +292,7 @@ argus/
 │   │   └── notification-icon.png
 │   ├── scripts/
 │   │   ├── brand-assets.mjs
+│   │   ├── build-android.mjs
 │   │   └── smoke-sentinel.ts
 │   ├── src/
 │   │   ├── components/
@@ -347,6 +355,7 @@ argus/
 │   │   │   └── wallet.ts
 │   │   ├── polyfills.ts
 │   │   └── theme.ts
+│   ├── .easignore
 │   ├── .env.example
 │   ├── app.config.ts
 │   ├── app.json
@@ -406,8 +415,10 @@ argus/
 │   │   ├── chain.ts
 │   │   ├── db.ts
 │   │   ├── demo.ts
+│   │   ├── faucet.ts
 │   │   ├── handler.ts
 │   │   ├── keys.ts
+│   │   ├── rpc.ts
 │   │   ├── server.ts
 │   │   ├── setup-keys.ts
 │   │   ├── smoke.ts
@@ -451,12 +462,12 @@ argus/
 | Part | State |
 | --- | --- |
 | Program | ✅ Deployed to devnet, 148 tests passing, audit round 1 done |
-| Web: landing page and vault app | ✅ Built (sample vault) |
+| Web: landing page and vault app | ✅ Live on devnet: connect a wallet, create a vault, deposit, send, release, cancel, freeze, guardian proposals (preview vault when no wallet) |
 | Web: "steal my wallet" live demo | ✅ Live on devnet (Sentinel cancels and freezes on-chain) |
 | Sentinel: demo, watcher, cancel and freeze | ✅ Built for Vercel and Neon; tested locally (smoke, race and timeout checks) |
 | Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
 | The owner's real phone rings: scan a QR on `/demo`, take the live ElevenLabs call on your phone, and the laptop follows along | ✅ Built (no phone number or Twilio needed) |
 | Hosting: web and Sentinel on Vercel | ⏳ Deploying |
 | Sentinel: scam lookups | ⏳ Next |
-| Web: wallet connection and live devnet data | ⏳ Next |
+| Web: wallet connection (Phantom, Solflare, Backpack) and test-money faucet | ✅ Built; full devnet run passes (22 checks) |
 | Android app | 🔨 In progress |

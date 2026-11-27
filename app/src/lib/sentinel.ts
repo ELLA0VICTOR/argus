@@ -53,6 +53,27 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
 
 export const startDemo = () => call<DemoSession>("/v1/demo/session");
 
+export interface SentinelInfo {
+  ai_guardian: string;
+  test_mint?: string;
+  program_id: string;
+}
+
+let info: Promise<SentinelInfo> | null = null;
+/** Sentinel's public details: the AI guardian address and the test token. Cached. */
+export function sentinelInfo(): Promise<SentinelInfo> {
+  info ??= fetch(SENTINEL_URL + "/v1/health")
+    .then((r) => r.json() as Promise<SentinelInfo>)
+    .catch((e) => {
+      info = null;
+      throw e;
+    });
+  return info;
+}
+
+/** 1,000 test dUSDC (and a little SOL for fees if the wallet has almost none). */
+export const claimFaucet = (wallet: string) => call<{ ok: true; sig: string; dusdc: string; sol: number }>("/v1/faucet", { wallet });
+
 /** Prepares the attack, signs it locally with the stolen key, and submits it. */
 export async function attack(session: DemoSession, kind: AttackKind): Promise<AttackResult> {
   const p = await call<{ nonce: string; message: string }>(`/v1/demo/${session.session}/attack`, { kind });

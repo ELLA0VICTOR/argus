@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 import { Icon } from "../../components/Icon";
 import { Button, ButtonLink } from "../../components/ui";
@@ -5,9 +6,12 @@ import { formatAmount, formatDuration } from "../../lib/format";
 import { Container } from "../Shell";
 import { Group, LogList, SectionTitle, WithdrawalRow } from "../parts";
 import { useVault } from "../store";
+import { useConnectModal } from "../wallet";
 
 export default function Overview() {
-  const { vault, freeze, role } = useVault();
+  const { vault, freeze, role, mode, deposit, faucet, walletBalance } = useVault();
+  const { open: connect } = useConnectModal();
+  const [depositing, setDepositing] = useState(false);
   const flagged = vault.pending.filter((p) => p.risk === "high" || p.risk === "critical");
   const normal = vault.pending.filter((p) => !flagged.includes(p));
   const spent = vault.spentInWindow < vault.dailyLimit ? vault.spentInWindow : vault.dailyLimit;
@@ -51,7 +55,7 @@ export default function Overview() {
               <ButtonLink to="/app/send" variant="primary" size="lg">
                 Send
               </ButtonLink>
-              <Button variant="secondary" size="lg">
+              <Button variant="secondary" size="lg" onClick={() => (mode === "live" ? setDepositing(true) : connect())}>
                 Deposit
               </Button>
             </div>
@@ -62,7 +66,18 @@ export default function Overview() {
             </button>
           )}
         </div>
+        {mode === "sample" && (
+          <p className="relative mt-6 border-t border-line-soft pt-4 text-[13px] text-muted">
+            This is a preview.{" "}
+            <button type="button" onClick={connect} className="font-medium text-fg underline-offset-4 hover:underline">
+              Connect a wallet
+            </button>{" "}
+            to open your own vault on devnet.
+          </p>
+        )}
       </section>
+
+      {depositing && deposit && faucet && <DepositSheet balance={walletBalance ?? null} decimals={vault.decimals} onDeposit={deposit} onFaucet={faucet} onClose={() => setDepositing(false)} />}
 
       {/* attention first */}
       {flagged.length > 0 && (
@@ -102,5 +117,77 @@ export default function Overview() {
         </Group>
       </section>
     </Container>
+  );
+}
+
+/** Move test dUSDC from the wallet into the vault, with a faucet button for test money. */
+function DepositSheet({ balance, decimals, onDeposit, onFaucet, onClose }: { balance: bigint | null; decimals: number; onDeposit: (a: bigint) => Promise<void>; onFaucet: () => Promise<void>; onClose: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const unit = 10n ** BigInt(decimals);
+  const t = amount.trim();
+  const parsed = /^\d+(\.\d{1,6})?$/.test(t) ? BigInt(t.split(".")[0]) * unit + BigInt(((t.split(".")[1] ?? "") + "000000").slice(0, decimals)) : null;
+  const tooMuch = parsed !== null && balance !== null && parsed > balance;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0b1020]/35 p-3 backdrop-blur-sm sm:items-center" onClick={onClose} role="presentation">
+      <div role="dialog" aria-modal="true" aria-labelledby="deposit-title" onClick={(e) => e.stopPropagation()} className="enter w-full max-w-[420px] rounded-[28px] bg-white p-6 shadow-[0_40px_80px_-30px_rgba(15,23,42,0.5)] sm:p-7">
+        <div className="flex items-start justify-between">
+          <h2 id="deposit-title" className="font-serif text-[30px] leading-tight">
+            Deposit
+          </h2>
+          <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-full text-muted hover:bg-panel hover:text-fg" aria-label="Close">
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+        <p className="mt-1 text-[14px] text-muted">Move test dUSDC from your wallet into the vault.</p>
+
+        <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl bg-panel px-4 py-3">
+          <div>
+            <div className="text-[12.5px] text-muted">In your wallet</div>
+            <div className="num text-[17px] font-medium">{balance === null ? "…" : formatAmount(balance, decimals)} dUSDC</div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onFaucet();
+              setBusy(false);
+            }}
+          >
+            <Icon name="plus" size={13} /> Get 1,000 test dUSDC
+          </Button>
+        </div>
+
+        <label className="mt-5 block">
+          <span className="text-[13.5px] text-muted">Amount</span>
+          <div className="mt-1.5 flex items-baseline gap-3 border-b border-line-strong pb-2.5 focus-within:border-fg">
+            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0" autoFocus className="num w-full min-w-0 bg-transparent text-[36px] leading-none font-medium outline-none placeholder:text-line-strong" />
+            {balance !== null && balance > 0n && (
+              <button type="button" onClick={() => setAmount(formatAmount(balance, decimals, decimals).replace(/,/g, ""))} className="text-[13px] text-muted hover:text-fg">
+                Max
+              </button>
+            )}
+          </div>
+        </label>
+        {tooMuch && <p className="mt-2 text-[13px] text-threat-soft">That is more than your wallet holds.</p>}
+
+        <Button
+          variant="primary"
+          size="lg"
+          className="mt-6 w-full"
+          disabled={!parsed || parsed <= 0n || tooMuch || busy}
+          onClick={async () => {
+            setBusy(true);
+            await onDeposit(parsed!);
+            setBusy(false);
+            onClose();
+          }}
+        >
+          {busy ? "Approve in your wallet…" : "Deposit"}
+        </Button>
+      </div>
+    </div>
   );
 }

@@ -37,7 +37,9 @@ export type ProposalAction =
   | { kind: "TightenLimits"; dailyLimit: bigint; delay: number }
   | { kind: "RotateOwner"; newOwner: string }
   | { kind: "Unfreeze" }
-  | { kind: "SetSafeAddress"; wallet: string };
+  | { kind: "SetSafeAddress"; wallet: string }
+  | { kind: "SetGuardians"; guardians: string[]; threshold: number }
+  | { kind: "SetAiGuardian"; key: string };
 
 export interface Proposal {
   id: number;
@@ -165,8 +167,9 @@ function sampleVault(): VaultState {
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const fakeSig = () => Array.from({ length: 88 }, () => B58[Math.floor(Math.random() * B58.length)]).join("");
 
-interface Ctx {
-  mode: "sample";
+export interface Ctx {
+  /** "sample": the preview vault with simulated transactions; "live": your vault on devnet. */
+  mode: "sample" | "live";
   vault: VaultState;
   role: Role;
   setRole: (r: Role) => void;
@@ -180,11 +183,19 @@ interface Ctx {
   veto: (p: Proposal) => Promise<void>;
   executeProposal: (p: Proposal) => Promise<void>;
   propose: (a: ProposalAction) => Promise<void>;
+  /** Release a withdrawal whose wait is over (anyone may). */
+  execute: (w: Withdrawal) => Promise<void>;
+  /** Live only: move test dUSDC from the wallet into the vault. */
+  deposit?: (amount: bigint) => Promise<void>;
+  /** Live only: get 1,000 test dUSDC from Argus's faucet. */
+  faucet?: () => Promise<void>;
+  /** Live only: the connected wallet's own dUSDC balance (outside the vault). */
+  walletBalance?: bigint | null;
 }
 
 export type SendPath = "instant" | "trusted" | "delayed";
 
-const VaultCtx = createContext<Ctx | null>(null);
+export const VaultCtx = createContext<Ctx | null>(null);
 
 export function VaultProvider({ children }: { children: ReactNode }) {
   const [vault, setVault] = useState<VaultState>(sampleVault);
@@ -265,6 +276,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
           if (a.kind === "RotateOwner") next = { ...next, owner: a.newOwner, pending: [] };
           return log(next, { kind: "gov", text: `Done: ${describeAction(p.action)}`, tone: "safe", tx: sig });
         }),
+      execute: (w) =>
+        run(`Release #${w.id}`, (v, sig) =>
+          log({ ...v, balance: v.balance - w.amount, pending: v.pending.filter((p) => p.id !== w.id) }, { kind: "send", text: `Withdrawal of ${(Number(w.amount) / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2 })} USDC completed`, tone: "safe", tx: sig }),
+        ),
       propose: (a) =>
         run("Propose change", (v, sig) => {
           const id = Math.max(0, ...v.proposals.map((p) => p.id)) + 1;
@@ -277,6 +292,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   return <VaultCtx.Provider value={value}>{children}</VaultCtx.Provider>;
+}
+
+/** For components that render with or without a vault (e.g. toasts). */
+export function useOptionalVault() {
+  return useContext(VaultCtx);
 }
 
 export function useVault() {
@@ -293,13 +313,16 @@ export function timelock(a: ProposalAction, v: VaultState): number {
     case "RemoveTrusted":
     case "TightenLimits":
       return 0;
+    case "SetAiGuardian":
+      return a.key === "11111111111111111111111111111111" ? 0 : v.delay;
     default:
       return v.delay;
   }
 }
 
 export function isVetoable(a: ProposalAction): boolean {
-  return a.kind === "AddTrusted" || a.kind === "LoosenLimits" || a.kind === "SetSafeAddress";
+  if (a.kind === "SetAiGuardian") return a.key !== "11111111111111111111111111111111";
+  return a.kind === "AddTrusted" || a.kind === "LoosenLimits" || a.kind === "SetSafeAddress" || a.kind === "SetGuardians";
 }
 
 export function describeAction(a: ProposalAction): string {
@@ -318,6 +341,10 @@ export function describeAction(a: ProposalAction): string {
       return "Unfreeze the vault";
     case "SetSafeAddress":
       return "Change the safe address";
+    case "SetGuardians":
+      return `Change guardians (${a.threshold} of ${a.guardians.length})`;
+    case "SetAiGuardian":
+      return a.key === "11111111111111111111111111111111" ? "Turn off the AI guardian" : "Change the AI guardian";
   }
 }
 

@@ -5,7 +5,7 @@ import { Wordmark } from "../components/Logo";
 import { Icon, type IconName } from "../components/Icon";
 import { explorerAddr, explorerTx, shortAddr } from "../lib/format";
 import { useConnectModal, useSolBalance } from "./wallet";
-import { useVault } from "./store";
+import { useOptionalVault } from "./store";
 
 const NAV: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/app", label: "Home", icon: "home", end: true },
@@ -19,8 +19,11 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[248px_1fr]">
       <Sidebar />
-      <div className="flex min-w-0 flex-col">
+      <div className="relative flex min-w-0 flex-col">
         <MobileTop />
+        <div className="absolute top-5 right-6 z-30 hidden lg:block xl:right-8">
+          <WalletButton />
+        </div>
         <main className="flex-1 pb-28 lg:pb-16">{children}</main>
       </div>
       <TabBar />
@@ -50,37 +53,29 @@ function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="mt-auto p-4">
-        <Account />
-      </div>
     </aside>
   );
 }
 
-/** The connected wallet, or the button to connect one. */
-function Account() {
+/** Top-right wallet control: "Connect wallet", or the connected wallet with its menu. */
+function WalletButton({ compact = false }: { compact?: boolean }) {
   const { publicKey, connecting } = useWallet();
   const { open } = useConnectModal();
   const [menu, setMenu] = useState(false);
   if (!publicKey)
     return (
-      <div className="rounded-2xl border border-line bg-canvas p-3">
-        <button type="button" onClick={open} className="press btn-brand flex h-11 w-full items-center justify-center gap-2 rounded-xl text-[14px] font-medium text-white">
-          <Icon name="wallet" size={16} /> {connecting ? "Connecting…" : "Connect wallet"}
-        </button>
-        <div className="mt-2.5 flex justify-center">
-          <Network />
-        </div>
-      </div>
+      <button type="button" onClick={open} className={`press btn-brand inline-flex items-center gap-2 rounded-full font-medium text-white ${compact ? "h-9 px-3.5 text-[13px]" : "h-10 px-4.5 text-[14px]"}`}>
+        <Icon name="wallet" size={compact ? 14 : 16} /> {connecting ? "Connecting…" : compact ? "Connect" : "Connect wallet"}
+      </button>
     );
   return (
     <div className="relative">
-      {menu && <AccountMenu onClose={() => setMenu(false)} className="bottom-full mb-2 left-0 right-0" />}
-      <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-canvas px-3 py-3 text-left transition-colors hover:border-line-strong">
-        <WalletAvatar />
-        <AccountLines />
-        <Icon name="chevron-down" size={15} className={`text-muted transition-transform ${menu ? "rotate-180" : ""}`} />
+      <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className={`flex items-center gap-2.5 rounded-full border border-line bg-white py-1 pl-1 shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition-colors hover:border-line-strong ${compact ? "h-9 pr-3" : "h-10 pr-3.5"}`}>
+        <WalletAvatar size={compact ? 26 : 30} />
+        {compact ? <span className="font-mono text-[12px]">{shortAddr(publicKey.toBase58())}</span> : <AccountLines />}
+        {!compact && <Icon name="chevron-down" size={14} className={`text-muted transition-transform ${menu ? "rotate-180" : ""}`} />}
       </button>
+      {menu && <AccountMenu onClose={() => setMenu(false)} className="top-full right-0 mt-2 w-[250px]" />}
     </div>
   );
 }
@@ -100,10 +95,10 @@ function AccountLines() {
   const { publicKey } = useWallet();
   const sol = useSolBalance();
   return (
-    <div className="min-w-0 flex-1">
-      <div className="font-mono text-[12.5px] font-medium">{publicKey ? shortAddr(publicKey.toBase58()) : ""}</div>
-      <div className="num text-[11.5px] text-muted">{sol === null ? "…" : `${sol.toLocaleString("en-US", { maximumFractionDigits: 3 })} SOL`} · Devnet</div>
-    </div>
+    <span className="flex items-baseline gap-2">
+      <span className="font-mono text-[12.5px] font-medium">{publicKey ? shortAddr(publicKey.toBase58()) : ""}</span>
+      <span className="num text-[12px] text-muted">{sol === null ? "…" : `${sol.toLocaleString("en-US", { maximumFractionDigits: 3 })} SOL`}</span>
+    </span>
   );
 }
 
@@ -156,36 +151,13 @@ function AccountMenu({ onClose, className = "" }: { onClose: () => void; classNa
   );
 }
 
-function Network() {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-[11px] text-muted ring-1 ring-line">
-      <span className="size-1.5 rounded-full bg-safe" /> Devnet
-    </span>
-  );
-}
-
 function MobileTop() {
-  const { publicKey, connecting } = useWallet();
-  const { open } = useConnectModal();
-  const [menu, setMenu] = useState(false);
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur-md lg:hidden">
       <Link to="/" className="text-fg" aria-label="Argus home">
         <Wordmark size={22} />
       </Link>
-      {publicKey ? (
-        <div className="relative">
-          <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex h-9 items-center gap-2 rounded-full border border-line bg-white py-1 pr-3 pl-1">
-            <WalletAvatar size={26} />
-            <span className="font-mono text-[12px]">{shortAddr(publicKey.toBase58())}</span>
-          </button>
-          {menu && <AccountMenu onClose={() => setMenu(false)} className="top-full right-0 mt-2 w-[240px]" />}
-        </div>
-      ) : (
-        <button type="button" onClick={open} className="press btn-brand inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium text-white">
-          <Icon name="wallet" size={14} /> {connecting ? "Connecting…" : "Connect"}
-        </button>
-      )}
+      <WalletButton compact />
     </header>
   );
 }
@@ -208,8 +180,9 @@ function TabBar() {
 }
 
 function Toasts() {
-  const { txs, dismissTx } = useVault();
-  if (txs.length === 0) return null;
+  const v = useOptionalVault();
+  if (!v || v.txs.length === 0) return null;
+  const { txs, dismissTx } = v;
   return (
     <div className="fixed inset-x-3 bottom-24 z-50 flex flex-col gap-2 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-[340px]" aria-live="polite">
       {txs.map((t) => (

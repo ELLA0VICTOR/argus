@@ -550,7 +550,7 @@ function Closing() {
       <div className="relative mx-auto max-w-[920px] px-5 pt-28 pb-16 sm:px-8">
         {/* floating glass tiles */}
         <GlassTile className="top-14 right-[8%] hidden sm:grid" rotate={-8} delay={0}>
-          <Logo size={40} />
+          <VoiceBars />
         </GlassTile>
         <GlassTile className="top-[190px] right-[30%] hidden sm:grid" rotate={10} delay={1200} glow>
           <DelayRing />
@@ -601,6 +601,18 @@ function Closing() {
         </div>
       </div>
     </footer>
+  );
+}
+
+/** Argus's call: a live voice waveform. */
+function VoiceBars() {
+  const h = [10, 22, 34, 18, 28, 12, 20];
+  return (
+    <span className="flex h-10 items-center gap-[5px]">
+      {h.map((x, i) => (
+        <span key={i} className="w-[4px] origin-center animate-wave rounded-full bg-current" style={{ height: x, animationDelay: `${i * 120}ms`, animationDuration: "1.4s" }} />
+      ))}
+    </span>
   );
 }
 

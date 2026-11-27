@@ -138,6 +138,15 @@ function Detail({ a }: { a: ProposalAction }) {
   if (a.kind === "AddTrusted" || a.kind === "RemoveTrusted") return <Address value={a.wallet} className="mt-1 text-[13px] text-muted" />;
   if (a.kind === "RotateOwner") return <div className="mt-1 text-[13px] text-muted">New owner <Address value={a.newOwner} className="text-[13px] text-muted" /></div>;
   if (a.kind === "SetSafeAddress") return <Address value={a.wallet} className="mt-1 text-[13px] text-muted" />;
+  if (a.kind === "SetGuardians")
+    return (
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+        {a.guardians.map((g) => (
+          <Address key={g} value={g} className="text-[13px] text-muted" />
+        ))}
+      </div>
+    );
+  if (a.kind === "SetAiGuardian") return a.key === "11111111111111111111111111111111" ? null : <Address value={a.key} className="mt-1 text-[13px] text-muted" />;
   if (a.kind === "LoosenLimits" || a.kind === "TightenLimits")
     return (
       <div className="num mt-1 text-[13px] text-muted">

@@ -67,14 +67,15 @@ export function TextLink({ to, children }: { to: string; children: ReactNode }) 
 
 /** A pending withdrawal. Calm by default. A suspicious one gets a red band and a red Cancel. */
 export function WithdrawalRow({ w }: { w: Withdrawal }) {
-  const { vault, cancel, txs } = useVault();
+  const { vault, cancel, execute, txs } = useVault();
   const now = useNow();
   const flagged = w.risk === "critical" || w.risk === "high";
   const [open, setOpen] = useState(false);
   const left = w.executesAt - now;
   const total = Math.max(1, w.executesAt - w.requestedAt);
   const passed = Math.min(1, Math.max(0, (now - w.requestedAt) / total));
-  const busy = txs.some((t) => t.state === "pending" && t.label.includes(`#${w.id}`));
+  const busy = txs.some((t) => t.state === "pending" && t.label.startsWith("Cancel") && t.label.includes(`#${w.id}`));
+  const releasing = txs.some((t) => t.state === "pending" && t.label.startsWith("Release") && t.label.includes(`#${w.id}`));
 
   return (
     <div className="enter border-b border-line-soft last:border-0">
@@ -101,6 +102,12 @@ export function WithdrawalRow({ w }: { w: Withdrawal }) {
               <div className="text-[12.5px] text-muted">{left > 0 ? "Leaves in" : "Ready"}</div>
               <div className="num text-[17px] font-medium text-wait">{left > 0 ? formatCountdown(left) : "now"}</div>
             </div>
+            {/* Devnet's clock can trail ours by a few seconds: offer Release once the chain agrees. */}
+            {left <= -20 && !flagged && (
+              <Button variant="primary" size="md" onClick={() => execute(w)} disabled={releasing} className="min-w-[104px]">
+                {releasing ? "Releasing" : "Release"}
+              </Button>
+            )}
             <Button variant={flagged ? "danger" : "secondary"} size="md" onClick={() => cancel(w)} disabled={busy} className="min-w-[104px]">
               {busy ? "Cancelling" : "Cancel"}
             </Button>

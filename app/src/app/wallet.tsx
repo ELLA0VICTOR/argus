@@ -2,10 +2,10 @@ import "../lib/polyfills";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConnectionProvider, WalletProvider, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { Icon } from "../components/Icon";
 import { Logo } from "../components/Logo";
-import { RPC_URL } from "../lib/config";
+import { RPC_URL, WS_URL } from "../lib/config";
 
 /**
  * Wallet connection for the app. Any Wallet Standard wallet (Phantom,
@@ -26,7 +26,7 @@ export function WalletProviders({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState(false);
   const modal = useMemo<ModalCtx>(() => ({ open: () => setShown(true), close: () => setShown(false) }), []);
   return (
-    <ConnectionProvider endpoint={RPC_URL} config={{ commitment: "confirmed" }}>
+    <ConnectionProvider endpoint={RPC_URL} config={{ commitment: "confirmed", wsEndpoint: WS_URL }}>
       {/* An empty list: Wallet Standard wallets register themselves. */}
       <WalletProvider wallets={[]} autoConnect>
         <ConnectModalCtx.Provider value={modal}>
@@ -41,10 +41,11 @@ export function WalletProviders({ children }: { children: ReactNode }) {
 /** Devnet SOL balance of the connected wallet, refreshed every 15 seconds. */
 export function useSolBalance(): number | null {
   const { connection } = useConnection();
-  const { publicKey } = useWallet();
+  const key = useWallet().publicKey?.toBase58() ?? null;
   const [sol, setSol] = useState<number | null>(null);
   useEffect(() => {
-    if (!publicKey) return setSol(null);
+    if (!key) return setSol(null);
+    const publicKey = new PublicKey(key);
     let live = true;
     const read = () =>
       connection
@@ -57,7 +58,7 @@ export function useSolBalance(): number | null {
       live = false;
       clearInterval(id);
     };
-  }, [connection, publicKey]);
+  }, [connection, key]);
   return sol;
 }
 
