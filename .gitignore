@@ -1,0 +1,34 @@
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+keys/
+*.keypair.json
+id.json
+**/ai-guardian*.json
+
+# --- Anchor / Rust ---
+target
+target/
+target.old-*/
+.anchor/
+test-ledger/
+**/*.rs.bk
+.yarn/
+.surfpool/
+
+# --- Node ---
+node_modules/
+dist/
+.vercel/
+
+# --- Expo / mobile ---
+mobile/.expo/
+mobile/android/
+mobile/ios/
+*.apk
+*.aab
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
