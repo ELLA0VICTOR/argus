@@ -18,6 +18,21 @@ import { decide, relayCall } from "../lib/sentinel";
  */
 export type Line = { who: "argus" | "you"; text: string };
 export type RemoteCall = { status: "ringing" | "connected" | "ended"; lines: Line[] };
+
+/**
+ * Overrides for a real vault (not the demo): what the voice agent's tools and
+ * the Decline button do, plus the words around the call. Each tool returns the
+ * sentence the agent should hear back.
+ */
+export type CallActions = {
+  cancel: () => Promise<string>;
+  allow: () => Promise<string>;
+  decline: () => Promise<void>;
+  vaultName: string;
+  destination: string;
+  footnote: string;
+  noAnswerText: string;
+};
 type Phase = "ringing" | "connecting" | "live" | "ended";
 
 export function IncomingCall({
@@ -30,6 +45,7 @@ export function IncomingCall({
   device = false,
   remote = null,
   onAnswered,
+  actions,
 }: {
   session: string;
   amount: string;
@@ -41,6 +57,7 @@ export function IncomingCall({
   remote?: RemoteCall | null;
   /** Called when the owner accepts or declines (stops the ringtone). */
   onAnswered?: () => void;
+  actions?: CallActions;
 }) {
   const [localPhase, setPhase] = useState<Phase>("ringing");
   const [localLines, setLines] = useState<Line[]>([]);
@@ -102,17 +119,19 @@ export function IncomingCall({
         connectionType: "webrtc",
         dynamicVariables: {
           owner_name: "there",
-          vault_name: "Savings",
+          vault_name: actions?.vaultName ?? "Savings",
           amount,
-          destination: "a brand-new address",
+          destination: actions?.destination ?? "a brand-new address",
           reason,
         },
         clientTools: {
           cancel_withdrawal: async () => {
+            if (actions) return actions.cancel();
             await decide(session, "cancel", "voice");
             return "Cancelled. Argus's guardian key is cancelling it on-chain and freezing the vault right now. The funds never left.";
           },
           allow_withdrawal: async () => {
+            if (actions) return actions.allow();
             await decide(session, "allow", "voice");
             return "Recorded. The withdrawal will go through after the 24-hour wait unless a guardian cancels it.";
           },
@@ -144,7 +163,10 @@ export function IncomingCall({
   const decline = async () => {
     onAnswered?.();
     try {
-      await decide(session, "cancel", "button");
+      if (actions) {
+        await actions.decline();
+        end();
+      } else await decide(session, "cancel", "button");
     } catch (e) {
       setError((e as Error).message);
     }
@@ -193,7 +215,7 @@ export function IncomingCall({
           <div className={`relative z-10 mx-auto flex max-w-[460px] flex-col px-6 pb-3 ${device ? "h-[calc(100%-max(env(safe-area-inset-top),16px))] pb-[max(env(safe-area-inset-bottom),12px)]" : "h-[calc(100%-46px)]"}`}>
             {/* caller */}
             <div className={`flex flex-col items-center text-center ${device ? "mt-[9vh]" : "mt-6"}`}>
-              {phase === "ringing" && <div className="text-[13px] text-white/70">{remote ? "Calling your phone…" : "Incoming call · you're the owner now"}</div>}
+              {phase === "ringing" && <div className="text-[13px] text-white/70">{remote ? "Calling your phone…" : actions ? "Incoming call" : "Incoming call · you're the owner now"}</div>}
               {phase !== "ringing" && (
                 <div className="num text-[14px] text-white/70">{phase === "connecting" ? "connecting…" : phase === "live" ? clock : connectedAt ? `Call ended · ${clock}` : "Call ended"}</div>
               )}
@@ -216,8 +238,8 @@ export function IncomingCall({
               {phase === "ringing" && !decided && (
                 <div className="enter rounded-[20px] bg-white/12 p-3.5 text-[13px] leading-snug backdrop-blur-xl">
                   <div className="font-semibold">Withdrawal on hold</div>
-                  <div className="num mt-0.5 text-white/80">{amount} to a brand-new address</div>
-                  <div className="mt-2 text-[12px] text-white/60">No answer in {left}s and Argus cancels anyway.</div>
+                  <div className="num mt-0.5 text-white/80">{amount} to {actions?.destination ?? "a brand-new address"}</div>
+                  <div className="mt-2 text-[12px] text-white/60">{actions ? actions.noAnswerText.replace("{s}", String(left)) : `No answer in ${left}s and Argus cancels anyway.`}</div>
                 </div>
               )}
               {(phase === "live" || phase === "connecting" || (phase === "ended" && lines.length > 0)) && (
@@ -287,7 +309,7 @@ export function IncomingCall({
         {screen}
       </div>
       <p className="mt-4 max-w-[300px] text-center text-[12px] leading-relaxed text-faint">
-        {remote ? "The call is happening on your phone: a live AI voice agent (ElevenLabs). This screen follows along." : "A live AI voice call (ElevenLabs), right in your browser. Scan the code above to take it on your phone instead."}
+        {actions ? actions.footnote : remote ? "The call is happening on your phone: a live AI voice agent (ElevenLabs). This screen follows along." : "A live AI voice call (ElevenLabs), right in your browser. Scan the code above to take it on your phone instead."}
       </p>
     </div>
   );

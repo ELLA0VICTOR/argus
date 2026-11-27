@@ -25,6 +25,12 @@ export interface Withdrawal {
   reason?: string;
   signals: Signal[];
   call?: { status: "ringing" | "in_progress" | "completed"; transcript: { who: "agent" | "user"; text: string }[] };
+  /** Live: Sentinel's alert for this withdrawal, if any. */
+  alertId?: string;
+  /** Live: when the alert was raised, ms since epoch. */
+  alertAt?: number;
+  /** Live: when the AI cancels on its own if nobody resolves it, ms since epoch. */
+  actAt?: number | null;
 }
 
 export interface Guardian { key: string; name: string; note: string; you?: boolean }
@@ -176,21 +182,23 @@ export interface Ctx {
   me: string;
   txs: Tx[];
   dismissTx: (id: number) => void;
-  cancel: (w: Withdrawal) => Promise<void>;
-  freeze: () => Promise<void>;
-  send: (p: { amount: bigint; destination: string; path: SendPath }) => Promise<void>;
-  approve: (p: Proposal) => Promise<void>;
-  veto: (p: Proposal) => Promise<void>;
-  executeProposal: (p: Proposal) => Promise<void>;
-  propose: (a: ProposalAction) => Promise<void>;
+  cancel: (w: Withdrawal) => Promise<boolean | void>;
+  freeze: () => Promise<unknown>;
+  send: (p: { amount: bigint; destination: string; path: SendPath }) => Promise<unknown>;
+  approve: (p: Proposal) => Promise<unknown>;
+  veto: (p: Proposal) => Promise<unknown>;
+  executeProposal: (p: Proposal) => Promise<unknown>;
+  propose: (a: ProposalAction) => Promise<unknown>;
   /** Release a withdrawal whose wait is over (anyone may). */
-  execute: (w: Withdrawal) => Promise<void>;
+  execute: (w: Withdrawal) => Promise<unknown>;
   /** Live only: move test dUSDC from the wallet into the vault. */
-  deposit?: (amount: bigint) => Promise<void>;
+  deposit?: (amount: bigint) => Promise<unknown>;
   /** Live only: get 1,000 test dUSDC from Argus's faucet. */
-  faucet?: () => Promise<void>;
+  faucet?: () => Promise<unknown>;
   /** Live only: the connected wallet's own dUSDC balance (outside the vault). */
   walletBalance?: bigint | null;
+  /** Live: "it was me" for a flagged withdrawal. Resolves to an error message, or null when done. */
+  dismiss?: (w: Withdrawal) => Promise<string | null>;
 }
 
 export type SendPath = "instant" | "trusted" | "delayed";

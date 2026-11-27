@@ -216,6 +216,7 @@ argus/
 │   ├── src/
 │   │   ├── app/                       # vault app: shell, store, pages
 │   │   │   ├── live/
+│   │   │   │   ├── ArgusCalling.tsx
 │   │   │   │   ├── CreateVault.tsx
 │   │   │   │   ├── LiveVault.tsx
 │   │   │   │   └── program.ts
@@ -231,6 +232,7 @@ argus/
 │   │   │   ├── store.tsx
 │   │   │   └── wallet.tsx
 │   │   ├── components/
+│   │   │   ├── AmountInput.tsx
 │   │   │   ├── Icon.tsx
 │   │   │   ├── Logo.tsx
 │   │   │   └── ui.tsx
@@ -422,7 +424,9 @@ argus/
 │   │   ├── server.ts
 │   │   ├── setup-keys.ts
 │   │   ├── smoke.ts
-│   │   └── vercel.ts
+│   │   ├── vercel.ts
+│   │   ├── watch-check.ts
+│   │   └── watch.ts
 │   ├── .env.example
 │   ├── demo-config.json
 │   ├── package.json
@@ -467,7 +471,8 @@ argus/
 | Sentinel: demo, watcher, cancel and freeze | ✅ Built for Vercel and Neon; tested locally (smoke, race and timeout checks) |
 | Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
 | The owner's real phone rings: scan a QR on `/demo`, take the live ElevenLabs call on your phone, and the laptop follows along | ✅ Built (no phone number or Twilio needed) |
-| Hosting: web and Sentinel on Vercel | ⏳ Deploying |
+| Hosting: web and Sentinel on Vercel | ✅ Live: tryargus.vercel.app (full devnet run passes there) |
+| Sentinel watches real vaults: scores each withdrawal, calls you in the app, cancels and freezes critical ones nobody confirms | ✅ Built; devnet checks pass (13 backend, 11 in-browser) |
 | Sentinel: scam lookups | ⏳ Next |
 | Web: wallet connection (Phantom, Solflare, Backpack) and test-money faucet | ✅ Built; full devnet run passes (22 checks) |
 | Android app | 🔨 In progress |

@@ -59,6 +59,8 @@ body {
 }
 ::selection { background: #2563eb; color: #fff; }
 :focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; border-radius: 6px; }
+/* Text fields show focus with their own border or underline, not a ring. */
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
 .num { font-family: var(--font-sans); font-variant-numeric: tabular-nums; font-feature-settings: "tnum", "cv11"; letter-spacing: -0.01em; }
 

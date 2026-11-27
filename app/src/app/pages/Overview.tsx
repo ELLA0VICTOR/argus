@@ -7,6 +7,7 @@ import { Container } from "../Shell";
 import { Group, LogList, SectionTitle, WithdrawalRow } from "../parts";
 import { useVault } from "../store";
 import { useConnectModal } from "../wallet";
+import { AmountInput, amountForInput, parseAmountInput } from "../../components/AmountInput";
 
 export default function Overview() {
   const { vault, freeze, role, mode, deposit, faucet, walletBalance } = useVault();
@@ -121,12 +122,10 @@ export default function Overview() {
 }
 
 /** Move test dUSDC from the wallet into the vault, with a faucet button for test money. */
-function DepositSheet({ balance, decimals, onDeposit, onFaucet, onClose }: { balance: bigint | null; decimals: number; onDeposit: (a: bigint) => Promise<void>; onFaucet: () => Promise<void>; onClose: () => void }) {
+function DepositSheet({ balance, decimals, onDeposit, onFaucet, onClose }: { balance: bigint | null; decimals: number; onDeposit: (a: bigint) => Promise<unknown>; onFaucet: () => Promise<unknown>; onClose: () => void }) {
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
-  const unit = 10n ** BigInt(decimals);
-  const t = amount.trim();
-  const parsed = /^\d+(\.\d{1,6})?$/.test(t) ? BigInt(t.split(".")[0]) * unit + BigInt(((t.split(".")[1] ?? "") + "000000").slice(0, decimals)) : null;
+  const parsed = parseAmountInput(amount, decimals);
   const tooMuch = parsed !== null && balance !== null && parsed > balance;
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0b1020]/35 p-3 backdrop-blur-sm sm:items-center" onClick={onClose} role="presentation">
@@ -163,9 +162,9 @@ function DepositSheet({ balance, decimals, onDeposit, onFaucet, onClose }: { bal
         <label className="mt-5 block">
           <span className="text-[13.5px] text-muted">Amount</span>
           <div className="mt-1.5 flex items-baseline gap-3 border-b border-line-strong pb-2.5 focus-within:border-fg">
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0" autoFocus className="num w-full min-w-0 bg-transparent text-[36px] leading-none font-medium outline-none placeholder:text-line-strong" />
+            <AmountInput value={amount} onValue={setAmount} decimals={decimals} placeholder="0" autoFocus className="num w-full min-w-0 bg-transparent text-[36px] leading-none font-medium outline-none placeholder:text-line-strong" />
             {balance !== null && balance > 0n && (
-              <button type="button" onClick={() => setAmount(formatAmount(balance, decimals, decimals).replace(/,/g, ""))} className="text-[13px] text-muted hover:text-fg">
+              <button type="button" onClick={() => setAmount(amountForInput(formatAmount(balance, decimals, decimals)))} className="text-[13px] text-muted hover:text-fg">
                 Max
               </button>
             )}

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Icon } from "../../components/Icon";
 import { Button } from "../../components/ui";
+import { AmountInput, amountForInput } from "../../components/AmountInput";
 import { formatAmount, formatDuration, shortAddr } from "../../lib/format";
 import { Container, PageHeader } from "../Shell";
 import { useVault, type SendPath } from "../store";
@@ -117,13 +118,12 @@ export default function Send() {
           <label className="block">
             <span className="text-[13.5px] text-muted">Amount</span>
             <div className="mt-2 flex items-baseline gap-3 border-b border-line-strong pb-3 focus-within:border-fg">
-              <input
-                inputMode="decimal"
-                autoComplete="off"
+              <AmountInput
                 placeholder="0"
                 value={amountStr}
+                onValue={setAmountStr}
+                decimals={vault.decimals}
                 disabled={review}
-                onChange={(e) => setAmountStr(e.target.value)}
                 className="num w-full min-w-0 bg-transparent text-[44px] leading-none font-medium outline-none placeholder:text-line-strong"
               />
               <span className="text-[17px] text-muted">{vault.symbol}</span>
@@ -133,7 +133,7 @@ export default function Send() {
             <span>
               Instant today: <span className="num text-fg">{formatAmount(remaining, vault.decimals)}</span>
             </span>
-            <button type="button" disabled={review} onClick={() => setAmountStr(formatAmount(vault.balance, vault.decimals, vault.decimals).replace(/,/g, ""))} className="hover:text-fg">
+            <button type="button" disabled={review} onClick={() => setAmountStr(amountForInput(formatAmount(vault.balance, vault.decimals, vault.decimals)))} className="hover:text-fg">
               Max {formatAmount(vault.balance, vault.decimals)}
             </button>
           </div>

@@ -11,6 +11,22 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - **Demo vault address:** _not created yet_
 
 ## Log
+- 2026-11-27 — Claude — **Sentinel watches real vaults.** See `docs/SENTINEL-API.md`, "Hackathon build": approved by Victor on 2026-11-27.
+  - **What's watched:** every vault whose AI guardian is Sentinel's key. Demo vaults are excluded.
+  - **Scoring:** each new pending withdrawal becomes an alert, using `new_address`, `share_of_vault`, `first_destination`, `lookalike` and `odd_hour`.
+  - **The AI acts alone only on critical alerts:** one still open 40 s after it was raised gets cancel and freeze from the AI key, claimed once in the DB.
+  - **Routes:**
+    - `GET /v1/vaults/:vault/alerts?status=open|all` (it scans the vault first, at most every 8 s);
+    - `GET /v1/vaults/:vault/watchlog`;
+    - `POST /v1/alerts/:id/dismiss {wallet, signature, ts}`: the message is `Argus: it was me. Dismiss alert {id} at {ts}`, from the owner or a guardian. **Critical alerts need a guardian.**
+    - `POST /internal/helius/webhook` (header `Authorization` = `HELIUS_WEBHOOK_SECRET`).
+    - A long-lived server also scans every 10 s.
+  - **Web app:**
+    - it polls alerts every 6 s;
+    - flagged rows show "Argus cancels it in 0:38" and "It was me";
+    - a new critical alert opens the in-app Argus call (same agent). The voice "cancel" signs `cancel_withdrawal` with the user's own wallet; "it was me" signs the dismissal.
+  - **Checks:** `npm run check:watch` (13 steps on devnet) and the in-browser run (11 steps) pass.
+  - **Codex:** mobile can use the same alert routes (above) and show the same call screen.
 - 2026-11-27 — Claude — **The web app is real now (devnet).**
   - **Wallet:** Wallet Standard, so Phantom, Solflare and Backpack are auto-detected. The connect button is top right.
   - **Vault:**

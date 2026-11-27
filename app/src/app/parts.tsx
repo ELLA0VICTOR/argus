@@ -65,9 +65,14 @@ export function TextLink({ to, children }: { to: string; children: ReactNode }) 
   );
 }
 
+/** 38 → "0:38", 75 → "1:15". */
+const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+
 /** A pending withdrawal. Calm by default. A suspicious one gets a red band and a red Cancel. */
 export function WithdrawalRow({ w }: { w: Withdrawal }) {
-  const { vault, cancel, execute, txs } = useVault();
+  const { vault, cancel, execute, dismiss, txs } = useVault();
+  const [dismissError, setDismissError] = useState<string | null>(null);
+  const [dismissing, setDismissing] = useState(false);
   const now = useNow();
   const flagged = w.risk === "critical" || w.risk === "high";
   const [open, setOpen] = useState(false);
@@ -82,7 +87,11 @@ export function WithdrawalRow({ w }: { w: Withdrawal }) {
       {flagged && (
         <div className="flex items-center gap-2 border-b border-line-soft px-5 py-2.5 text-[13px] text-muted">
           <span className="size-1.5 rounded-full bg-threat" />
-          Looks suspicious. Argus is calling you.
+          {w.actAt && w.actAt > now * 1000
+            ? `Looks like theft. Argus cancels it in ${mmss(Math.ceil((w.actAt - now * 1000) / 1000))} unless someone confirms it.`
+            : w.actAt
+              ? "Looks like theft. Argus is cancelling it."
+              : "Looks suspicious. Argus is calling you."}
         </div>
       )}
       <div className="px-5 pt-5 pb-4">
@@ -118,6 +127,25 @@ export function WithdrawalRow({ w }: { w: Withdrawal }) {
         <div className="mt-4 h-[3px] overflow-hidden rounded-full bg-line-soft" aria-hidden="true">
           <div className={`h-full rounded-full bg-wait/60`} style={{ width: `${passed * 100}%`, transition: "width 800ms cubic-bezier(0.16,1,0.3,1)" }} />
         </div>
+
+        {flagged && dismiss && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+            <button
+              type="button"
+              disabled={dismissing}
+              onClick={async () => {
+                setDismissing(true);
+                setDismissError(await dismiss(w));
+                setDismissing(false);
+              }}
+              className="font-medium text-fg underline-offset-4 hover:underline disabled:opacity-50"
+            >
+              {dismissing ? "Confirm in your wallet…" : "It was me"}
+            </button>
+            <span className="text-muted">{w.risk === "critical" ? "For a withdrawal this risky, a guardian has to confirm." : "Sign to let it through."}</span>
+            {dismissError && <span className="w-full text-threat-soft">{dismissError}</span>}
+          </div>
+        )}
 
         {(w.reason || w.signals.length > 0) && (
           <>

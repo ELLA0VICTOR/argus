@@ -12,7 +12,8 @@
     "start": "node --env-file=.env src/server.ts",
     "setup:keys": "node src/setup-keys.ts",
     "typecheck": "tsc --noEmit",
-    "build:vercel": "node scripts/build-vercel.mjs"
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "check:watch": "node --env-file=.env src/watch-check.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

@@ -105,3 +105,32 @@ export function streamEvents(session: string, onEvent: (e: DemoEvent) => void): 
   };
   return () => es.close();
 }
+
+/* ------------------------------------------------- watching real vaults */
+
+export interface WatchAlert {
+  id: string;
+  vault: string;
+  withdrawal: { pda: string; id: string; amount: string; destination: string; destination_owner: string; requested_at: number; executes_at: number };
+  risk: "low" | "medium" | "high" | "critical";
+  score: number;
+  reason: string;
+  signals: { id: string; label: string; weight: number }[];
+  status: "open" | "cancelled" | "executed" | "dismissed" | "voided";
+  /** When the AI cancels on its own if nobody resolves it (critical only), ms since epoch. */
+  act_at: number | null;
+  resolution: { by_role?: string; tx?: string } | null;
+  created_at: number;
+}
+
+/** Open alerts for a vault. Sentinel scans the vault first (at most every 8 s). */
+export async function vaultAlerts(vault: string): Promise<WatchAlert[]> {
+  const r = await fetch(`${SENTINEL_URL}/v1/vaults/${vault}/alerts?status=open`);
+  if (!r.ok) throw new Error("alerts unavailable");
+  return ((await r.json()) as { alerts: WatchAlert[] }).alerts;
+}
+
+/** The exact text a member signs to say "it was me". */
+export const dismissMessage = (id: string, ts: number) => `Argus: it was me. Dismiss alert ${id} at ${ts}`;
+
+export const dismissAlert = (id: string, body: { wallet: string; signature: string; ts: number }) => call<WatchAlert>(`/v1/alerts/${id}/dismiss`, body);

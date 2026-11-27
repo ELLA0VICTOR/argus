@@ -278,6 +278,48 @@ The create-vault wizard reads `ai_guardian` from here to fill the vault's AI gua
 
 These exist but are authenticated by provider secrets and are not part of the client contract: `POST /internal/helius/webhook`, `POST /internal/elevenlabs/tool/cancel_withdrawal`, `POST /internal/elevenlabs/call-status`. The ElevenLabs tool endpoint checks that the call belongs to an open alert before it signs `cancel_withdrawal`. Web-demo endpoints ("Steal my wallet") will be documented here when built.
 
+## Hackathon build: what's implemented, and how it differs (2026-11-27)
+
+Approved by Victor on 2026-11-27. They cover what the live build does today. The full contract above still describes the production design.
+
+**Watching real vaults**
+
+- **What's watched:** every vault whose `ai_guardian` is Sentinel's AI key.
+- **How Sentinel learns of activity:**
+  - `POST /internal/helius/webhook` (Helius raw webhook, `Authorization` header = `HELIUS_WEBHOOK_SECRET`);
+  - a scan of the vault whenever a client reads its alerts (at most every 8 s per vault);
+  - a long-lived server also scans every 10 s.
+- **Scoring:** each new pending withdrawal is scored into an Alert with the shape above. The signals used are `new_address`, `share_of_vault`, `first_destination`, `lookalike` and `odd_hour`.
+- **The AI key acts on its own decision only:** a **critical** alert still open 45 seconds after it was raised gets `cancel_withdrawal` and then `freeze`, signed by the AI key.
+  - The 45 s window replaces the phone call's no-answer timeout. It fits inside one serverless invocation.
+  - High-risk alerts are raised but never auto-cancelled.
+  - Statuses follow the chain: `open` → `cancelled` (by owner, guardian or ai) / `executed`.
+
+**Reads without a session token (deviation)**
+
+- `GET /v1/vaults/{vault}/alerts?status=open|all` and `GET /v1/vaults/{vault}/watchlog` need no Bearer token. Every field is derived from public on-chain data.
+- SIWS sessions (§1) and contacts (§3) aren't built yet.
+
+**Dismiss with a signed message (deviation)**
+
+- `POST /v1/alerts/{id}/dismiss { wallet, signature, ts }`:
+  - `signature` is the wallet's ed25519 signature of the exact text `Argus: it was me. Dismiss alert {id} at {ts}`;
+  - `ts` (unix seconds) must be within 5 minutes;
+  - the wallet must be the vault's owner or a guardian.
+- **Critical alerts can only be dismissed by a guardian.** A stolen owner key is exactly the threat, so the owner key alone can't stand Argus down.
+- Dismissing never touches the chain. It stops the AI's automatic cancel for that alert.
+
+**Cancelling from the app**
+
+- The owner or a guardian cancels with **their own wallet's** signature (`cancel_withdrawal` sent straight to the program).
+- The in-app "Argus is calling" voice agent's *cancel* tool does exactly that. No client request makes the AI key sign anything.
+
+**Other live routes**
+
+- `POST /v1/faucet { wallet }`: 1,000 test dUSDC, plus 0.1 SOL if the wallet holds under 0.05 SOL. Once per wallet per 12 h, and 5 per address per day.
+- `POST /v1/rpc/devnet`: a JSON-RPC relay to the private devnet RPC. It enforces a method allowlist, scans only for the Argus program, and caps batches at 25.
+- The web demo's routes are under `/v1/demo/*` (see `docs/HANDOFF.md`).
+
 ## Error codes
 
 `UNAUTHENTICATED`, `TOKEN_EXPIRED`, `BAD_SIGNATURE`, `NONCE_EXPIRED`, `NONCE_USED`, `NOT_VAULT_MEMBER`, `GUARDIAN_REQUIRED`, `VAULT_NOT_FOUND`, `ALERT_NOT_FOUND`, `INVALID_PHONE`, `RATE_LIMITED`, `INTERNAL`.

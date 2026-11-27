@@ -6,6 +6,7 @@ import { PROGRAM_ID, connection } from "./chain.ts";
 import { checkDb, describeError } from "./db.ts";
 import { faucet } from "./faucet.ts";
 import { relayRpc } from "./rpc.ts";
+import { dismiss, heliusWebhook, listAlerts, watchlog } from "./watch.ts";
 import { createSession, decide, DemoError, demoPublic, ensureMint, eventsAfter, load, phoneReady, prepareAttack, relayCall, submitAttack, tick, type AttackKind } from "./demo.ts";
 
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
@@ -39,6 +40,22 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
     chunks.push(c as Buffer);
   }
   if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw new DemoError(400, "Body must be JSON.");
+  }
+}
+
+/** Webhook bodies (batches of transactions) can be larger than client requests. */
+async function readJsonLarge(req: IncomingMessage): Promise<unknown> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > 2_000_000) throw new DemoError(413, "Request too large.");
+    chunks.push(c as Buffer);
+  }
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
@@ -138,6 +155,25 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     if (req.method === "POST" && (url.pathname === "/v1/rpc/devnet" || url.pathname === "/v1/rpc")) {
       const r = await relayRpc(await readJson(req), clientIp(req));
       return json(res, r.status, r.json);
+    }
+
+    // GET /v1/vaults/:vault/alerts?status=open|all   (scans the vault first, at most every 8 s)
+    if (req.method === "GET" && parts[0] === "v1" && parts[1] === "vaults" && parts[3] === "alerts" && parts.length === 4) {
+      return json(res, 200, await listAlerts(parts[2], url.searchParams.get("status") === "all" ? "all" : "open"));
+    }
+    // GET /v1/vaults/:vault/watchlog
+    if (req.method === "GET" && parts[0] === "v1" && parts[1] === "vaults" && parts[3] === "watchlog" && parts.length === 4) {
+      return json(res, 200, await watchlog(parts[2]));
+    }
+    // POST /v1/alerts/:id/dismiss  { wallet, signature, ts }
+    if (req.method === "POST" && parts[0] === "v1" && parts[1] === "alerts" && parts[3] === "dismiss" && parts.length === 4) {
+      return json(res, 200, await dismiss(parts[2], await readJson(req)));
+    }
+    // POST /internal/helius/webhook   (Authorization must equal HELIUS_WEBHOOK_SECRET)
+    if (req.method === "POST" && url.pathname === "/internal/helius/webhook") {
+      const secret = process.env.HELIUS_WEBHOOK_SECRET;
+      if (!secret || req.headers.authorization !== secret) return fail(res, 401, "UNAUTHORIZED", "Bad webhook secret.");
+      return json(res, 200, await heliusWebhook(await readJsonLarge(req)));
     }
 
     // POST /v1/faucet  { wallet }  → 1,000 test dUSDC (and a little SOL for fees if needed)
