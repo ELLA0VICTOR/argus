@@ -16,8 +16,18 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  // Some dependencies still call require(); give the ESM bundle one.
-  banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
+  // CommonJS dependencies inside an ESM bundle expect require, __filename and
+  // __dirname (e.g. "bindings", which looks for optional native add-ons).
+  banner: {
+    js: [
+      "import { createRequire as __cr } from 'node:module';",
+      "import { fileURLToPath as __fu } from 'node:url';",
+      "import { dirname as __dn } from 'node:path';",
+      "const require = __cr(import.meta.url);",
+      "const __filename = __fu(import.meta.url);",
+      "const __dirname = __dn(__filename);",
+    ].join(" "),
+  },
   // Optional native speed-ups for websockets. The code falls back without them.
   external: ["bufferutil", "utf-8-validate"],
   legalComments: "none",
