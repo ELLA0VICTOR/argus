@@ -3,6 +3,7 @@
 // "steal my wallet" demo. The full client API is in docs/SENTINEL-API.md.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { PROGRAM_ID } from "./chain.ts";
+import { checkDb } from "./db.ts";
 import { createSession, decide, DemoError, demoPublic, eventsAfter, load, phoneReady, prepareAttack, relayCall, submitAttack, tick, type AttackKind } from "./demo.ts";
 
 const ORIGINS = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173").split(",").map((s) => s.trim());
@@ -113,7 +114,13 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
   try {
     if (req.method === "GET" && url.pathname === "/v1/health") {
-      return json(res, 200, { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, version: "0.1.0" });
+      const base = { ok: true, cluster: "devnet", program_id: PROGRAM_ID.toBase58(), ai_guardian: demoPublic.ai, version: "0.1.0" };
+      // ?deep=1 also checks the database (host only, never credentials).
+      if (url.searchParams.get("deep") === "1") {
+        const db = await checkDb();
+        return json(res, db.ok ? 200 : 503, { ...base, ok: db.ok, db });
+      }
+      return json(res, 200, base);
     }
 
     if (parts[0] === "v1" && parts[1] === "demo") {
@@ -154,7 +161,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     fail(res, 404, "NOT_FOUND", "No such route.");
   } catch (e) {
     if (e instanceof DemoError) return fail(res, e.status, "DEMO_ERROR", e.message);
-    console.error("[sentinel] error:", (e as Error).message);
+    const err = e as Error & { cause?: { code?: string } };
+    console.error("[sentinel] error:", err.message, err.cause?.code ? `(cause: ${err.cause.code})` : "");
     if (!res.headersSent) fail(res, 500, "INTERNAL", "Something went wrong. Please try again.");
   }
 }

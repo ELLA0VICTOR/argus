@@ -4,9 +4,46 @@
 // however many requests race for it.
 import { neon } from "@neondatabase/serverless";
 
-const URL = process.env.DATABASE_URL;
-if (!URL) throw new Error("DATABASE_URL is not set (a Postgres URL, e.g. from Neon)");
-export const sql = neon(URL);
+/**
+ * Accepts the connection string the way people tend to paste it: with a
+ * `DATABASE_URL=` prefix, inside quotes, or as Neon's `psql '…'` snippet.
+ */
+export function cleanDatabaseUrl(raw: string): string {
+  let s = raw.trim();
+  if (s.startsWith("DATABASE_URL=")) s = s.slice("DATABASE_URL=".length).trim();
+  if (s.startsWith("psql ")) s = s.slice(5).trim();
+  s = s.replace(/^['"]+|['"]+$/g, "").trim();
+  return s;
+}
+
+const URL_RAW = process.env.DATABASE_URL;
+if (!URL_RAW) throw new Error("DATABASE_URL is not set (a Postgres URL, e.g. from Neon)");
+const DB_URL = cleanDatabaseUrl(URL_RAW);
+
+/** Host only, for diagnostics. Never the user or password. */
+export const dbHost = (() => {
+  try {
+    const u = new URL(DB_URL);
+    return /^postgres(ql)?:$/.test(u.protocol) ? u.hostname : `not a postgres URL (${u.protocol})`;
+  } catch {
+    return "not a valid URL";
+  }
+})();
+
+export const sql = neon(DB_URL);
+
+/** For /v1/health?deep=1: can we reach the database? */
+export async function checkDb(): Promise<{ ok: boolean; host: string; error?: string }> {
+  try {
+    await sql`select 1`;
+    return { ok: true, host: dbHost };
+  } catch (e) {
+    const err = e as Error & { cause?: { code?: string; message?: string } };
+    const why = err.cause?.code ?? err.cause?.message ?? err.message;
+    // Strip anything that looks like a connection string before returning it.
+    return { ok: false, host: dbHost, error: String(why).replace(/postgres(ql)?:\/\/\S+/g, "<url>").slice(0, 200) };
+  }
+}
 
 let ready: Promise<void> | null = null;
 
