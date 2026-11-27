@@ -1,38 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, BackHandler, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
+import { Alert, AppState, BackHandler, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
-import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, getAccount, getMint, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { Button, Copy, Field, Label, Logo, Panel, Status, common } from '../components/ui';
-import { DawnHero } from '../components/DawnHero';
+import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, getMint, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { Button, Copy, Field, Label, Panel, common } from '../components/ui';
+import { AppHeader, AppTabBar, type AppTab } from '../components/AppChrome';
+import { VaultPreview } from './VaultPreview';
+import { FreezeButton } from '../components/FreezeButton';
 import { TransactionNotice } from '../components/TransactionNotice';
 import { ActivityTimeline, AllowanceMeter, KeyAvatar, RouteIndicator, WaitProgress } from '../components/VaultPatterns';
-import { allowanceFraction, allowanceRemaining, delayLabel } from '../domain/vaultMetrics';
+import { allowanceFraction, allowanceRemaining, delayLabel, sendRoute } from '../domain/vaultMetrics';
 import { connectWallet, disconnectWallet, signWalletTransaction, type WalletSession } from '../services/wallet';
 import { programClient as client, connection } from '../program/runtime';
 import { readVault, readWalletVaults, type VaultView } from '../program/read';
 import { integer, type GovAction, type RecordAt, type Proposal, type Withdrawal } from '../program/client';
-import { checkTransaction, parseAmount, runTransaction, transactionBusy, type TransactionState } from '../program/transactions';
+import { checkTransaction, parseAmount, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from '../program/transactions';
 import { formatUnits } from '../sentinel/rules';
 import { countdown } from '../domain/demo';
 import { colors as c, fonts as f } from '../theme';
+import { userMessage } from '../domain/userMessage';
+import { formatTypedAmount } from '../domain/amountInput';
 import * as SecureStore from 'expo-secure-store';
 import { DEMO_MINT, SENTINEL_AI_GUARDIAN } from '../sentinel/demo';
 
-type Tab = 'Home' | 'Send' | 'Activity' | 'Guardians' | 'Settings';
-const tabs: Tab[] = ['Home', 'Send', 'Activity', 'Guardians', 'Settings'];
 const key = (value: string) => {
   try { return new PublicKey(value.trim()); }
   catch { throw new Error('Enter a valid Solana wallet or account address.'); }
 };
 const numberId = (value: { toString(): string }) => BigInt(value.toString());
 
-export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable }: { onDemo: () => void; onLiveDemo: () => void; onSentinel: () => void; onBusy: (busy: boolean) => void; demoAvailable: boolean }) {
+export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolean; onLiveDemo: () => void; onBusy: (busy: boolean) => void }) {
   const [wallet, setWallet] = useState<WalletSession | null>(null);
   const [address, setAddress] = useState('');
   const [vaultChoices, setVaultChoices] = useState<string[]>([]);
   const [view, setView] = useState<VaultView | null>(null);
-  const [tab, setTab] = useState<Tab>('Home');
+  const [tab, setTab] = useState<AppTab>('Home');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tx, setTx] = useState<TransactionState>({ phase: 'idle' });
@@ -41,7 +43,7 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
   const [amount, setAmount] = useState('');
   const [depositAmount, setDepositAmount] = useState('');
   const [destination, setDestination] = useState('');
-  const [sendMode, setSendMode] = useState<'instant' | 'delayed' | 'trusted'>('delayed');
+  const [depositing, setDepositing] = useState(false);
   const [mint, setMint] = useState(DEMO_MINT);
   const [guardians, setGuardians] = useState('');
   const [threshold, setThreshold] = useState('1');
@@ -49,15 +51,19 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
   const [safe, setSafe] = useState('');
   const [delay, setDelay] = useState('86400');
   const [limit, setLimit] = useState('100');
+  const [vaultName, setVaultName] = useState('Savings');
+  const [displayName, setDisplayName] = useState('Your');
+  const [advanced, setAdvanced] = useState(false);
   const [proposalWallet, setProposalWallet] = useState('');
   const [action, setAction] = useState<'unfreeze' | 'addTrusted' | 'removeTrusted' | 'rotateOwner'>('unfreeze');
   const lock = useRef(false);
   const current = useRef('');
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [tab, !!view, creating]);
   const busy = loading || transactionBusy(tx);
-  useEffect(() => { onBusy(transactionBusy(tx)); }, [tx.phase, onBusy]);
-  useEffect(() => { void SecureStore.getItemAsync('argus:pending-devnet-transaction').then(value => {
-    if (!value) return; const pending = JSON.parse(value) as TransactionState;
-    if (pending.signature && ['sending', 'confirming', 'unknown'].includes(pending.phase)) setTx({ ...pending, phase: 'unknown' });
+  useEffect(() => { if (active) onBusy(transactionBusy(tx)); }, [active, tx.phase, onBusy]);
+  useEffect(() => { void restorePendingTransaction(SecureStore).then(pending => {
+    if (pending) setTx(pending);
   }).catch(() => setError('Could not restore transaction status. Check recent wallet activity before sending again.')); }, []);
 
   const refresh = useCallback(async (selected = current.current) => {
@@ -65,30 +71,36 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
     setLoading(true);
     try {
       const result = await readVault(client, key(selected));
-      if (current.current === selected) { setView(result); setError(null); }
+      const name = await SecureStore.getItemAsync(`argus.vault.${selected}.name`).catch(() => null);
+      if (current.current === selected) { setDisplayName(name || 'Your'); setView(result); setError(null); }
     } catch { if (current.current === selected) setError('Could not refresh this devnet vault. Check the address and your connection, then retry.'); }
     finally { if (current.current === selected) setLoading(false); }
   }, []);
 
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active' && !lock.current) void refresh(); }); return () => sub.remove(); }, [refresh]);
-  useEffect(() => { const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (active && state === 'active' && !lock.current) void refresh(); }); return () => sub.remove(); }, [active, refresh]);
+  useEffect(() => { if (!active) return; const sub = BackHandler.addEventListener('hardwareBackPress', () => {
     if (busy) return true;
     if (creating) { setCreating(false); return true; }
     if (view && tab !== 'Home') { setTab('Home'); return true; }
     if (view) { current.current = ''; setView(null); return true; }
     return false;
-  }); return () => sub.remove(); }, [view, tab, busy, creating]);
+  }); return () => sub.remove(); }, [active, view, tab, busy, creating]);
 
   async function connect() {
     if (lock.current) return;
     lock.current = true; setLoading(true); setError(null);
     try {
       const session = await connectWallet(); setWallet(session);
-      try { setVaultChoices((await readWalletVaults(client, key(session.address))).map(v => v.address.toBase58())); }
-      catch { setError('Wallet connected. Vault discovery could not reach devnet; paste a vault address below or retry later.'); }
+      try {
+        const choices = (await readWalletVaults(client, key(session.address))).map(v => v.address.toBase58());
+        setVaultChoices(choices);
+        if (choices.length) { current.current = choices[0]; setAddress(choices[0]); await refresh(choices[0]); }
+        else setCreating(true);
+      }
+      catch { setError("Couldn't reach devnet to look for your vault. Try again."); }
     }
-    catch (e) { setError(e instanceof Error ? e.message : 'Could not connect your Android wallet.'); }
+    catch (e) { console.info('Wallet connection failed', e); setError('Could not connect your wallet. Open your Solana wallet and try again.'); }
     finally { lock.current = false; setLoading(false); }
   }
   async function open() {
@@ -104,11 +116,11 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
       const instructions = await build(key(wallet.address));
       const result = await runTransaction(connection, key(wallet.address), instructions,
         transaction => signWalletTransaction(wallet, transaction), setTx,
-        pending => SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(pending)));
-      await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(result))
+        pending => saveTransaction(SecureStore, pending));
+      await saveTransaction(SecureStore, result)
         .catch(() => setError('Transaction status could not be saved. Keep its Explorer link; the on-chain result above still applies.'));
       if (result.phase === 'confirmed') await refresh();
-    } catch (e) { setTx({ phase: 'failed', message: e instanceof Error ? e.message : 'Could not prepare this action. Refresh and retry.' }); }
+    } catch (e) { console.info('Could not prepare transaction', e); setTx({ phase: 'failed', message: userMessage(e, 'Could not prepare this action. Refresh and retry.') }); }
     finally { lock.current = false; }
   }
   function confirm(title: string, body: string, build: (signer: PublicKey) => Promise<TransactionInstruction[]>) {
@@ -119,8 +131,19 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
   const guardianIndex = wallet && v ? v.data.guardians.slice(0, v.data.guardianCount).findIndex(g => g.toBase58() === wallet.address) : -1;
   const owner = !!wallet && v?.data.owner.toBase58() === wallet.address;
   const protective = owner || guardianIndex >= 0 || (!!wallet && v?.data.aiGuardian.toBase58() === wallet.address);
-  const units = (value: string) => `${formatUnits(value, view?.decimals ?? 0)} tokens`;
+  const symbol = v?.data.mint.toBase58() === DEMO_MINT ? 'dUSDC' : 'tokens';
+  const units = (value: string) => `${formatUnits(value, view?.decimals ?? 0)} ${symbol}`;
   const remaining = v ? allowanceRemaining(numberId(v.data.dailyLimit), numberId(v.data.spentInWindow), numberId(v.data.windowStart), BigInt(Math.floor(now / 1000))) : 0n;
+  let parsedAmount = 0n;
+  try { parsedAmount = parseAmount(amount.replace(/,/g, ''), view?.decimals ?? 6); } catch { /* A partially typed amount has no route yet. */ }
+  let validDestination = false;
+  try { const recipient = key(destination); validDestination = !recipient.equals(PublicKey.default) && !recipient.equals(v?.address ?? PublicKey.default); } catch { /* Keep the route unset for an incomplete address. */ }
+  const trustedRecipient = view?.trusted.some(t => t.data.wallet.toBase58() === destination.trim() && numberId(t.data.activeAt) <= BigInt(Math.floor(now / 1000)));
+  const sendMode = sendRoute(parsedAmount, remaining, !!trustedRecipient, validDestination);
+  const sendError = amount && !parsedAmount ? `Enter a number with up to ${view?.decimals ?? 6} decimals.`
+    : view && parsedAmount > BigInt(view.balance) ? "That's more than the vault holds."
+    : destination.trim() === v?.address.toBase58() ? "You can't send the vault to itself."
+    : destination && !validDestination ? "That doesn't look like a Solana address." : null;
   function freeze() {
     if (!v) return;
     confirm('Pause outgoing transfers?', 'Any owner or guardian can freeze. Unfreezing needs guardian approval.', async signer => {
@@ -142,33 +165,35 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
       });
   }
   const txNotice = <TransactionNotice state={tx} onCheck={() => { void checkTransaction(connection, tx).then(async state => {
-    setTx(state); await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(state)); if (state.phase === 'confirmed') await refresh();
+    setTx(state); await saveTransaction(SecureStore, state); if (state.phase === 'confirmed') await refresh();
   }).catch(() => setError('Could not check confirmation. Keep this signature and try checking again.')); }} />;
 
   let content;
   if (!v || !view) content = <View style={common.stack}>
-    <DawnHero />
-    {!wallet ? <><Copy style={common.muted}>A self-custodial vault on Solana. Large withdrawals wait; your guardians can stop them.</Copy>
-      <Button title="Connect your wallet" busy={loading} busyTitle="Opening your wallet…" onPress={() => { void connect(); }} />
-      <Button title="Try the live theft demo" tone="secondary" disabled={busy} onPress={onLiveDemo} />
-      {demoAvailable && <Button title="Explore the offline sample" tone="quiet" disabled={busy} onPress={onDemo} />}
-      <Button title="Open alerts and contact settings" tone="quiet" disabled={busy} onPress={onSentinel} /></>
-      : <Panel><Label>Your connected wallet</Label><Copy selectable style={common.mono}>{wallet.address}</Copy>
+    {!wallet ? <VaultPreview tab={tab} onTab={setTab} onConnect={() => { void connect(); }} onDemo={onLiveDemo} busy={busy} />
+      : <Panel><Copy style={common.title}>{creating ? 'Set up your vault' : 'Your vaults'}</Copy>
         {!creating ? <>{vaultChoices.map(selected => <View key={selected} style={{ gap: 8 }}><Copy selectable style={common.mono}>{selected}</Copy><Button title="Open this vault" tone="secondary" disabled={busy} onPress={() => { current.current = selected; setAddress(selected); void refresh(selected); }} /></View>)}
           <Field label="Vault address" value={address} onChangeText={setAddress} autoCapitalize="none" autoCorrect={false} placeholder="Paste a vault account address" />
           <Button title="Open vault" busy={loading} disabled={!address.trim()} onPress={() => { void open(); }} />
           <Button title="Create a new vault" tone="quiet" disabled={busy} onPress={() => setCreating(true)} /></>
-          : <><Copy style={{ fontFamily: f.semibold, fontSize: 20 }}>Create your devnet vault</Copy>
-            <Field label="Classic SPL token mint" value={mint} onChangeText={setMint} autoCapitalize="none" autoCorrect={false} />
-            <Field label="Guardian wallets (separate with commas)" value={guardians} onChangeText={setGuardians} autoCapitalize="none" autoCorrect={false} />
+          : <>
+            <Copy style={common.muted}>Your connected wallet becomes the owner key. Guardians can cancel, freeze and approve changes. They can never take your money.</Copy>
+            <Field label="Name it" value={vaultName} onChangeText={setVaultName} placeholder="Savings" maxLength={32} />
+            <Copy style={[common.muted, { fontSize: 13 }]}>Only you see this name. It's saved on this device.</Copy>
+            <Label>Guardians</Label><Copy style={common.muted}>People or keys you trust: family, a second device, a backup key. Any one of them can cancel a withdrawal or freeze the vault.</Copy>
+            <Field label="Wallet addresses, separated by commas" value={guardians} onChangeText={setGuardians} autoCapitalize="none" autoCorrect={false} multiline />
             <Field label="Approvals needed" value={threshold} onChangeText={setThreshold} keyboardType="number-pad" />
-            <Field label="Safe wallet (separate from your owner wallet)" value={safe} onChangeText={setSafe} autoCapitalize="none" autoCorrect={false} />
-            <Field label="AI guardian (optional)" value={ai} onChangeText={setAi} autoCapitalize="none" autoCorrect={false} />
-            <Copy style={common.muted}>The announced Sentinel public key is prefilled. Clear it to disable the AI guardian. Its signing key stays on the server.</Copy>
-            <Field label="Withdrawal delay in seconds (60–2,592,000)" value={delay} onChangeText={setDelay} keyboardType="number-pad" />
-            <Field label="Daily token allowance" value={limit} onChangeText={setLimit} keyboardType="decimal-pad" />
-            <Copy style={common.muted}>Keep owner, guardian and safe keys separate. The wallet pays devnet rent and fees. The program is upgradeable by the hackathon dev wallet; use test tokens only.</Copy>
-            <Button title="Review vault creation" disabled={busy} onPress={() => confirm('Create this vault?', 'Check every address. Guardians control changes to your vault’s rules.', async signer => {
+            <Label>Safe address</Label><Copy style={common.muted}>If something goes wrong, any guardian can move everything here. Use a wallet the owner key doesn't control, like a hardware wallet.</Copy>
+            <Field label="Wallet address" value={safe} onChangeText={setSafe} autoCapitalize="none" autoCorrect={false} />
+            <Label>Spending rules</Label><Copy style={common.muted}>Up to the allowance goes out instantly each day. Anything bigger waits, and can be cancelled while it waits.</Copy>
+            <Field label="Daily allowance" value={limit} onChangeText={setLimit} keyboardType="decimal-pad" />
+            <Copy style={common.muted}>Wait for larger amounts</Copy>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{[{ label: '1 min', value: '60' }, { label: '1h', value: '3600' }, { label: '24h', value: '86400' }, { label: '3d', value: '259200' }].map(option => <Pressable key={option.value} accessibilityRole="radio" accessibilityState={{ checked: delay === option.value }} disabled={busy} onPress={() => setDelay(option.value)} style={{ minWidth: '45%', flexGrow: 1, minHeight: 44, padding: 12, borderRadius: 12, backgroundColor: delay === option.value ? c.fg : c.panel }}><Copy style={{ color: delay === option.value ? c.ink : c.fg }}>{option.label}</Copy></Pressable>)}</View>
+            <Label>AI guardian</Label><Copy style={common.muted}>Argus watches every withdrawal and calls you when one looks like theft. Its key can only cancel and freeze. It can never move funds or vote.</Copy>
+            <View style={common.row}><Copy style={{ flex: 1 }}>Let Argus watch this vault</Copy><Switch accessibilityLabel="Let Argus watch this vault" value={!!ai.trim()} disabled={busy} trackColor={{ true: c.brand, false: c.lineStrong }} onValueChange={enabled => setAi(enabled ? SENTINEL_AI_GUARDIAN : '')} /></View>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: advanced }} onPress={() => setAdvanced(!advanced)} style={{ minHeight: 44, justifyContent: 'center' }}><Copy style={common.muted}>Advanced {advanced ? '⌃' : '⌄'}</Copy></Pressable>
+            {advanced && <><Field label="Token mint" value={mint} onChangeText={setMint} autoCapitalize="none" autoCorrect={false} /><Field label="AI guardian public address" value={ai} onChangeText={setAi} autoCapitalize="none" autoCorrect={false} /></>}
+            <Button title="Create vault" disabled={busy} onPress={() => confirm('Create this vault?', 'Check every address. Guardians control changes to your vault’s rules.', async signer => {
               const token = await getMint(connection, key(mint), 'confirmed', TOKEN_PROGRAM_ID);
               const set = guardians.split(',').map(g => key(g)); const t = Number(threshold);
               if (!/^\d+$/.test(delay)) throw new Error('Enter the withdrawal delay in whole seconds.');
@@ -178,46 +203,54 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
               const id = BigInt(Date.now()); const selected = client.vaultAddress(signer, id)[0].toBase58();
               const ix = await client.initializeVault(signer, key(mint), { vaultId: id, guardians: set, threshold: t,
                 aiGuardian: ai.trim() ? key(ai) : PublicKey.default, safeAddress: key(safe), delaySeconds: d, dailyLimit: limit.trim() === '0' ? 0n : parseAmount(limit, token.decimals) });
+              await SecureStore.setItemAsync(`argus.vault.${selected}.name`, vaultName.trim() || 'Your');
               current.current = selected; setAddress(selected); return [ix];
             })} />
+            <Copy style={[common.muted, { fontSize: 12 }]}>One signature. It costs a little devnet SOL for rent and fees.</Copy>
             <Button title="Back to your vaults" tone="quiet" disabled={busy} onPress={() => setCreating(false)} /></>}
       </Panel>}
     {txNotice}
-    <Copy style={[common.muted, { textAlign: 'center', fontSize: 12 }]}>Live on Solana devnet · Test tokens only</Copy>
   </View>;
   else content = <View style={common.stack}>
-    <View style={{ gap: 8 }}><Label>{tab === 'Home' ? 'Your vault' : tab}</Label><Copy style={common.title}>{tab === 'Home' ? 'A little more peace of mind.' : tab === 'Send' ? 'Move money on your terms.' : tab === 'Activity' ? 'Time is on your side.' : tab === 'Guardians' ? 'Separate keys. Shared protection.' : 'Make yourself at home.'}</Copy></View>
+    {tab !== 'Home' && <View style={{ gap: 12 }}><Copy accessibilityRole="header" style={common.title}>{tab}</Copy>
+      {tab === 'Activity' && <Copy style={common.muted}>Everything Argus saw and did, newest first.</Copy>}
+      {tab === 'Guardians' && <Copy style={common.muted}>Any one guardian can cancel, freeze, or move everything to your safe address. {v.data.threshold} of {v.data.guardianCount} are needed to change keys or rules.</Copy>}
+      {tab === 'Settings' && <Copy style={common.muted}>These rules live on-chain. Changing them takes your guardians, through a proposal.</Copy>}
+    </View>}
     {txNotice}
     {tab === 'Home' && <>
-      <Panel style={{ borderRadius: 28 }}><View style={common.row}><Label>Vault balance</Label><Status text={v.data.frozen ? 'Frozen' : 'Protected'} tone={v.data.frozen ? 'brand' : 'safe'} /></View>
-        <Copy style={[common.amount, { fontSize: 38 }]}>{units(view.balance)}</Copy>
-        <Copy style={common.muted}>Devnet · Test tokens</Copy><Copy selectable style={common.mono}>{v.data.mint.toBase58()}</Copy>
-        <AllowanceMeter remaining={units(remaining.toString())} total={units(v.data.dailyLimit.toString())} fraction={allowanceFraction(remaining, numberId(v.data.dailyLimit))} />
-        <Copy style={common.muted}>Large transfers wait {v.data.delaySeconds.toString()} seconds. Your guardians can cancel during the wait.</Copy>
-        <Button title="Send tokens" disabled={!owner || v.data.frozen || busy} onPress={() => setTab('Send')} />
+      <Panel style={{ borderRadius: 28, padding: 24, gap: 18 }}><Copy style={common.muted}>{displayName} vault</Copy>
+        <Copy style={[common.amount, { fontSize: 40 }]}>{formatUnits(view.balance, view.decimals)} <Copy style={{ color: c.muted, fontSize: 18 }}>{symbol}</Copy></Copy>
+        {v.data.frozen ? <Copy style={common.muted}>Nothing can leave until {v.data.threshold} guardians unfreeze it.</Copy> : <>
+        <AllowanceMeter remaining={formatUnits(remaining.toString(), view.decimals)} total={formatUnits(v.data.dailyLimit.toString(), view.decimals)} fraction={allowanceFraction(remaining, numberId(v.data.dailyLimit))} />
+        <Copy style={[common.muted, { fontSize: 13 }]}>Larger amounts wait {delayLabel(numberId(v.data.delaySeconds))} and can be cancelled.</Copy></>}
+        {owner && <View style={common.row}><View style={{ flex: 1 }}><Button title="Send" disabled={v.data.frozen || busy} onPress={() => setTab('Send')} /></View><View style={{ flex: 1 }}><Button title="Deposit" tone="secondary" disabled={busy} onPress={() => setDepositing(!depositing)} /></View></View>}
+        {depositing && <View style={{ gap: 16 }}><Copy style={common.muted}>Move test {symbol} from your wallet into the vault.</Copy>
         <Field label="Amount to deposit" value={depositAmount} onChangeText={setDepositAmount} keyboardType="decimal-pad" placeholder="0.00" editable={!busy} />
-        <Button title="Deposit tokens" tone="secondary" disabled={busy || !wallet || !depositAmount.trim()} onPress={() => confirm('Deposit into this vault?', `${depositAmount} tokens will move from your wallet to this vault.`, async signer => {
+        <Button title="Deposit" tone="secondary" disabled={busy || !wallet || !depositAmount.trim()} onPress={() => confirm('Deposit into this vault?', `${depositAmount} ${symbol} will move from your wallet to this vault.`, async signer => {
           const latest = await fresh(); const from = getAssociatedTokenAddressSync(latest.data.mint, signer);
           return [await client.deposit(latest, signer, from, parseAmount(depositAmount, view.decimals))];
-        })} />
-        <Button title={v.data.frozen ? 'Vault is paused' : 'Freeze vault'} tone="quiet" disabled={!protective || v.data.frozen || busy} onPress={freeze} />
+        })} /></View>}
+        <FreezeButton disabled={!protective || busy} frozen={v.data.frozen} onPress={freeze} />
       </Panel>
-      <Panel><Label>Waiting to leave</Label>{view.withdrawals.length === 0 ? <Copy style={common.muted}>No pending requests.</Copy> : view.withdrawals.slice(0, 3).map((w, i) => <View key={w.address.toBase58()} style={[i > 0 && common.divider, { gap: 12 }]}>
+      <View style={{ gap: 12 }}><Copy style={s.section}>Waiting to leave</Copy><Panel>{view.withdrawals.length === 0 ? <Copy style={common.muted}>No pending withdrawals.</Copy> : view.withdrawals.slice(0, 3).map((w, i) => <View key={w.address.toBase58()} style={[i > 0 && common.divider, { gap: 12 }]}>
         <Copy style={common.num}>{units(w.data.amount.toString())}</Copy><Copy style={common.muted}>Request {w.data.id.toString()}</Copy>
+        <Copy style={[common.mono, { color: c.muted, fontSize: 12 }]}>to {w.data.destination.toBase58().slice(0, 4)}…{w.data.destination.toBase58().slice(-4)}</Copy>
         <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
-      </View>)}<Button title="Review pending withdrawals" tone="quiet" onPress={() => setTab('Activity')} /></Panel>
+        <View style={{ alignSelf: 'flex-start' }}><Button title="Cancel" tone="secondary" disabled={!protective || busy} onPress={() => cancel(w)} /></View>
+      </View>)}{view.withdrawals.length > 0 && <Button title="View all" tone="quiet" onPress={() => setTab('Activity')} />}</Panel></View>
       <VaultActivity history={view.history} limit={4} />
-      <Panel><Label>Your protection</Label><View style={[common.row, { justifyContent: 'flex-start' }]}><KeyAvatar label="Guardian keys" /><Copy style={{ flex: 1 }}>{v.data.threshold} of {v.data.guardianCount} guardians approve rule changes.</Copy></View><View style={[common.row, { justifyContent: 'flex-start' }]}><KeyAvatar label="AI guardian" ai /><Copy style={[common.muted, { flex: 1 }]}>{v.data.aiGuardian.equals(PublicKey.default) ? 'No AI guardian is configured.' : 'The AI guardian can cancel or freeze. It cannot withdraw.'}</Copy></View></Panel>
+      <Pressable accessibilityRole="button" onPress={onLiveDemo} disabled={busy} style={{ alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center' }}><Copy style={{ color: c.brand, fontFamily: f.medium }}>Try live demo →</Copy></Pressable>
     </>}
     {tab === 'Send' && <>
-      <Copy style={common.muted}>Enter the recipient’s wallet address. Argus will use its associated token account for this mint.</Copy>
-      <Panel><Field label="Recipient wallet" value={destination} onChangeText={setDestination} autoCapitalize="none" autoCorrect={false} />
-        <Field label="Token amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-        <Label>Choose your transfer route</Label>
-        <RouteIndicator selected={sendMode} waitLabel={delayLabel(numberId(v.data.delaySeconds))} onSelect={setSendMode} disabled={busy} />
-        <Copy style={common.muted}>{sendMode === 'delayed' ? 'Your request starts a countdown. It must be executed separately after the delay.' : sendMode === 'trusted' ? 'The recipient must already be an active trusted wallet.' : 'This transfer uses your remaining daily allowance.'}</Copy>
-        <Button title={sendMode === 'delayed' ? 'Review withdrawal request' : 'Review transfer'} disabled={!owner || busy || v.data.frozen || !destination.trim() || !amount.trim()} onPress={() => confirm('Review this transfer?', `${amount} tokens to ${destination}. ${sendMode === 'delayed' ? 'The program will hold the request until its delay ends.' : 'This transfer moves tokens immediately.'}`, async signer => {
-          const latest = await fresh(); const receiver = key(destination); const value = parseAmount(amount, view.decimals);
+      {!owner || v.data.frozen ? <Copy style={common.muted}>{v.data.frozen ? `The vault is frozen, so nothing can leave. Unfreezing takes ${v.data.threshold} guardians.` : "Only the owner key can send. Guardians can't move funds anywhere except a sweep to your safe address, which keeps a single compromised guardian harmless."}</Copy> : <Panel style={{ borderRadius: 28 }}>
+        <Field label="Amount" value={amount} onChangeText={value => setAmount(formatTypedAmount(value))} keyboardType="decimal-pad" placeholder="0" style={{ fontSize: 40 }} />
+        <Copy style={[common.muted, { fontSize: 13 }]}>Instant today: {units(remaining.toString())}</Copy>
+        <Field label="To" value={destination} onChangeText={setDestination} placeholder="Paste a Solana address" autoCapitalize="none" autoCorrect={false} />
+        <RouteIndicator selected={sendError ? null : sendMode} waitLabel={delayLabel(numberId(v.data.delaySeconds))} disabled />
+        <Copy style={common.muted}>{sendError ?? (!sendMode ? "Argus tells you how it'll go before you sign anything." : sendMode === 'delayed' ? `Waits ${delayLabel(numberId(v.data.delaySeconds))}, then goes. You can cancel it until then.` : sendMode === 'trusted' ? 'Goes now. This is one of your trusted addresses.' : "Goes now. It fits within today's allowance.")}</Copy>
+        <Button title="Continue" disabled={!owner || busy || v.data.frozen || !sendMode || !!sendError} onPress={() => confirm('Review this transfer?', `${amount} ${symbol} to ${destination}. ${sendMode === 'delayed' ? 'The program will hold the request until its delay ends.' : 'This transfer moves tokens immediately.'}`, async signer => {
+          const latest = await fresh(); const receiver = key(destination); const value = parseAmount(amount.replace(/,/g, ''), view.decimals);
           if (receiver.equals(latest.address) || receiver.equals(PublicKey.default)) throw new Error('Choose a valid recipient wallet other than the vault.');
           const ata = getAssociatedTokenAddressSync(latest.data.mint, receiver, true);
           const create = createAssociatedTokenAccountIdempotentInstruction(signer, ata, receiver, latest.data.mint);
@@ -228,7 +261,7 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
               trusted: client.trustedAddress(latest.address, receiver)[0] }).instruction();
           return [create, ix];
         })} />
-      </Panel>
+      </Panel>}
     </>}
     {tab === 'Activity' && <>
       {view.withdrawals.length === 0 && <Panel><Copy>No pending withdrawals. Your vault is quiet.</Copy></Panel>}
@@ -236,21 +269,25 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
         <Copy style={common.amount}>{units(w.data.amount.toString())}</Copy><Copy selectable style={common.mono}>{w.data.destination.toBase58()}</Copy>
         <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
         {w.data.ownerEpoch !== v.data.ownerEpoch && <Copy style={common.muted}>The owner changed. This request can only be cancelled.</Copy>}
-        <Button title="Cancel withdrawal" tone="secondary" disabled={!protective || busy} onPress={() => cancel(w)} />
-        <Button title="Execute withdrawal" tone="secondary" disabled={busy || v.data.frozen || w.data.ownerEpoch !== v.data.ownerEpoch || BigInt(Math.floor(now / 1000)) < numberId(w.data.executesAt)} onPress={() => confirm('Execute this withdrawal?', 'This sends the exact stored amount to the exact stored token account.', async signer => {
+        <Button title="Cancel" tone="secondary" disabled={!protective || busy} onPress={() => cancel(w)} />
+        <Button title="Release" tone="secondary" disabled={busy || v.data.frozen || w.data.ownerEpoch !== v.data.ownerEpoch || BigInt(Math.floor(now / 1000)) < numberId(w.data.executesAt)} onPress={() => confirm('Release this withdrawal?', 'This sends the exact stored amount to the exact stored token account.', async signer => {
           const latest = await fresh(); const request = await client.fetchWithdrawal(w.address, latest.address);
           return [await client.executeWithdrawal(latest, signer, request)];
         })} />
       </Panel>)}
-      <Button title="Freeze vault" tone="quiet" disabled={!protective || v.data.frozen || busy} onPress={freeze} />
+      <FreezeButton disabled={!protective || busy} frozen={v.data.frozen} onPress={freeze} />
       <VaultActivity history={view.history} />
     </>}
     {tab === 'Guardians' && <>
-      <Panel><Label>Guardian threshold</Label><Copy style={common.num}>{v.data.threshold} of {v.data.guardianCount} approvals</Copy>{v.data.guardians.slice(0, v.data.guardianCount).map((g, i) => <View key={g.toBase58()} style={common.row}><KeyAvatar label={`Guardian ${i + 1}`} /><View style={{ flex: 1, gap: 4 }}><Copy>Guardian {i + 1}</Copy><Copy selectable style={[common.mono, { fontSize: 12 }]}>{g.toBase58()}</Copy></View></View>)}</Panel>
+      <Copy style={s.section}>Who's protecting this vault</Copy><Panel>{v.data.guardians.slice(0, v.data.guardianCount).map((g, i) => <View key={g.toBase58()} style={common.row}><KeyAvatar label={`Guardian ${i + 1}`} /><View style={{ flex: 1, gap: 4 }}><Copy>Guardian {i + 1}</Copy><Copy selectable style={[common.mono, { fontSize: 12 }]}>{g.toBase58()}</Copy></View></View>)}
+        {!v.data.aiGuardian.equals(PublicKey.default) && <View style={[common.row, common.divider]}><KeyAvatar label="AI guardian" ai /><View style={{ flex: 1, gap: 4 }}><Copy>AI guardian</Copy><Copy style={common.muted}>Can cancel or freeze. Cannot move funds.</Copy></View></View>}
+      </Panel>
       {view.trusted.length > 0 && <Panel><Label>Trusted wallets</Label>{view.trusted.map(record => <View key={record.address.toBase58()} style={{ gap: 8 }}><Copy selectable style={common.mono}>{record.data.wallet.toBase58()}</Copy>
         {numberId(record.data.activeAt) > BigInt(Math.floor(now / 1000)) ? <Copy style={common.countdown}>{countdown(Number(record.data.activeAt.toString()) * 1000, now)}</Copy>
-          : <Button title="Send to this trusted wallet" tone="quiet" disabled={!owner || busy || v.data.frozen} onPress={() => { setDestination(record.data.wallet.toBase58()); setSendMode('trusted'); setTab('Send'); }} />}
+          : <Button title="Send" tone="quiet" disabled={!owner || busy || v.data.frozen} onPress={() => { setDestination(record.data.wallet.toBase58()); setTab('Send'); }} />}
       </View>)}</Panel>}
+      <Copy style={s.section}>Proposals</Copy>
+      {view.proposals.length === 0 && <Panel><Copy>No open proposals</Copy><Copy style={common.muted}>Changes to keys, limits or trusted addresses show up here for guardians to approve.</Copy></Panel>}
       {view.proposals.map(p => {
         const a = p.data.action; const stale = p.data.guardianEpoch !== v.data.guardianEpoch;
         const ttl = BigInt(client.program.idl.constants?.find(c => c.name === 'proposalTtl')?.value ?? '604800');
@@ -279,25 +316,37 @@ export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable 
       </Panel>}
     </>}
     {tab === 'Settings' && <>
+      <Copy style={s.section}>Spending</Copy><Panel>
+        <Copy>Instant allowance</Copy><Copy style={common.muted}>Spend this much per day without waiting.</Copy><Copy style={common.num}>{units(v.data.dailyLimit.toString())}</Copy>
+        <View style={common.divider}><Copy>Delay for larger amounts</Copy></View><Copy style={common.muted}>Anyone protecting the vault can cancel during this time.</Copy><Copy style={common.num}>{delayLabel(numberId(v.data.delaySeconds))}</Copy>
+      </Panel>
       <Panel><Label>Vault account</Label><Copy selectable style={common.mono}>{v.address.toBase58()}</Copy><Label>Owner wallet</Label><Copy selectable style={common.mono}>{v.data.owner.toBase58()}</Copy>
         <Label>Safe wallet</Label><Copy selectable style={common.mono}>{v.data.safeAddress.toBase58()}</Copy>
         <Copy style={common.muted}>The program is upgradeable by the hackathon dev wallet. Devnet only; use test tokens.</Copy>
         <Button title="View deployed program" tone="quiet" onPress={() => { void Linking.openURL('https://explorer.solana.com/address/4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh?cluster=devnet'); }} />
       </Panel>
-      <Panel><Label>Sentinel alerts</Label><Copy style={common.muted}>Phone and push setup use a separate signed Sentinel session. Until its service is connected, those screens show sample data. They never sign your vault transactions.</Copy><Button title="Open alerts and contact settings" tone="secondary" disabled={busy} onPress={onSentinel} /></Panel>
       {guardianIndex >= 0 && <Button title="Sweep all tokens to the safe wallet" tone="secondary" disabled={busy} onPress={() => confirm('Sweep and freeze this vault?', 'Every token goes to the preset safe wallet. This also pauses outgoing transfers.', async signer => [await client.emergencySweep(await fresh(), signer, true)])} />}
       <Button title="Choose another vault" tone="quiet" disabled={busy} onPress={() => { current.current = ''; setView(null); setTx({ phase: 'idle' }); }} />
     </>}
-    <Button title="Refresh from devnet" tone="quiet" busy={loading} disabled={transactionBusy(tx)} onPress={() => { void refresh(); }} />
+    <Button title="Refresh" tone="quiet" busy={loading} disabled={transactionBusy(tx)} onPress={() => { void refresh(); }} />
   </View>;
 
-  return <SafeAreaView style={s.root}><View style={s.header}><Logo /><Status text="Solana devnet" /></View>
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
-      {error && <Panel><Copy accessibilityRole="alert">{error}</Copy><Button title="Dismiss message" tone="quiet" onPress={() => setError(null)} /></Panel>}
+  function account() {
+    Alert.alert('Your wallet', wallet?.address, [
+      { text: 'Close', style: 'cancel' },
+      { text: 'Disconnect', onPress: () => {
+        if (busy || !wallet) return;
+        void disconnectWallet(wallet).then(() => { current.current = ''; setWallet(null); setView(null); setCreating(false); setVaultChoices([]); setTab('Home'); setError(null); })
+          .catch(() => setError('Could not disconnect your wallet. Try again.'));
+      } },
+    ]);
+  }
+  return <SafeAreaView style={s.root}><AppHeader wallet={wallet?.address} busy={busy} onConnect={() => { void connect(); }} onAccount={account} />
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
+      {error && <Copy accessibilityRole="alert" style={[common.muted, { fontSize: 13 }]}>{error}</Copy>}
       {content}
-      {wallet && !view && <Button title="Disconnect wallet" tone="quiet" disabled={busy} onPress={() => { void disconnectWallet(wallet).then(() => { setWallet(null); setTx({ phase: 'idle' }); }).catch(() => setError('Could not revoke wallet access. Try again.')); }} />}
     </ScrollView></KeyboardAvoidingView>
-    {view && <View style={s.nav}>{tabs.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: t === tab }} disabled={busy} style={[s.tab, t === tab && s.active]} onPress={() => setTab(t)}><Copy style={{ color: t === tab ? c.brand : c.muted, fontFamily: f.medium, fontSize: 12 }}>{t}</Copy></Pressable>)}</View>}
+    <AppTabBar selected={tab} onSelect={setTab} disabled={transactionBusy(tx)} />
   </SafeAreaView>;
 }
 
@@ -319,21 +368,19 @@ function proposalDescription(a: GovAction, decimals: number): string {
   return `Daily allowance: ${formatUnits(limits.dailyLimit.toString(), decimals)} tokens. Delay: ${limits.delaySeconds.toString()} seconds.`;
 }
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.canvas }, header: { backgroundColor: c.ink, paddingHorizontal: 22, paddingVertical: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  content: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 28, gap: 20, flexGrow: 1 },
-  nav: { backgroundColor: c.ink, flexDirection: 'row', padding: 8, borderTopWidth: 1, borderTopColor: c.lineSoft },
-  tab: { flex: 1, minHeight: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, active: { backgroundColor: c.brandSoft },
+  root: { flex: 1, backgroundColor: c.canvas },
+  content: { paddingHorizontal: 20, paddingTop: 32, paddingBottom: 32, gap: 24, flexGrow: 1 },
+  section: { fontFamily: f.semibold, fontSize: 15, paddingHorizontal: 4 },
 });
 
 function VaultActivity({ history, limit = 10 }: { history: VaultView['history']; limit?: number }) {
-  return <Panel><Label>Recent activity</Label>
+  return <View style={{ gap: 12 }}><Copy style={{ fontFamily: f.semibold, fontSize: 15, paddingHorizontal: 4 }}>Recent activity</Copy><Panel>
     {history === null ? <Copy style={common.muted}>Transaction history is unavailable. Refresh to try again.</Copy>
-      : history.length === 0 ? <Copy style={common.muted}>No recent vault transactions returned by devnet.</Copy>
+      : history.length === 0 ? <View style={{ gap: 8 }}><Copy>Nothing here yet</Copy><Copy style={common.muted}>Events appear as soon as Argus sees them on-chain.</Copy></View>
         : <ActivityTimeline entries={history.slice(0, limit).map(item => ({ id: item.signature,
           title: item.err ? 'Transaction failed' : item.confirmationStatus === 'finalized' ? 'Transaction finalized' : 'Transaction confirmed',
           detail: item.blockTime == null ? `Slot ${item.slot}` : new Date(item.blockTime * 1000).toLocaleString(), done: !item.err,
           onPress: () => { void Linking.openURL(`https://explorer.solana.com/tx/${item.signature}?cluster=devnet`); },
         }))} />}
-    <Copy style={[common.muted, { fontSize: 12 }]}>Recent transactions involving this vault, as reported by devnet.</Copy>
-  </Panel>;
+  </Panel></View>;
 }

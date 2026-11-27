@@ -22,3 +22,9 @@ export function delayLabel(seconds: bigint): string {
   if (seconds % 60n === 0n) return `${seconds / 60n}m`;
   return `${seconds}s`;
 }
+
+/** Match the web Send screen: trust first, then allowance, then the wait. */
+export function sendRoute(amount: bigint, remaining: bigint, trusted: boolean, destinationValid: boolean): 'instant' | 'trusted' | 'delayed' | null {
+  if (amount <= 0n || !destinationValid) return null;
+  return trusted ? 'trusted' : amount <= remaining ? 'instant' : 'delayed';
+}

@@ -12,22 +12,24 @@ export function Label({ children }: PropsWithChildren) {
   return <Copy style={s.label}>{typeof children === 'string' ? sentenceCase(children) : children}</Copy>;
 }
 
-const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1).toLowerCase().replace(/\bai\b/g, 'AI');
+const sentenceCase = (text: string) => text === text.toUpperCase()
+  ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase().replace(/\bai\b/g, 'AI') : text;
 
 export function Panel({ children, style }: PropsWithChildren<{ style?: ViewStyle }>) {
   return <View style={[s.panel, style]}>{children}</View>;
 }
 
-export function Button({ title, onPress, tone = 'neutral', disabled = false, busy = false, busyTitle = 'Working…' }: {
-  title: string; onPress: () => void; tone?: 'neutral' | 'threat' | 'quiet' | 'secondary'; disabled?: boolean; busy?: boolean; busyTitle?: string;
+export function Button({ title, onPress, tone = 'neutral', size = 'regular', disabled = false, busy = false, busyTitle = 'Working…' }: {
+  title: string; onPress: () => void; tone?: 'neutral' | 'threat' | 'quiet' | 'secondary'; size?: 'regular' | 'small'; disabled?: boolean; busy?: boolean; busyTitle?: string;
 }) {
   return <Pressable accessibilityRole="button" accessibilityState={{ disabled: disabled || busy, busy }}
     disabled={disabled || busy} onPress={onPress}
     style={({ pressed }) => [s.button, tone === 'threat' && s.threatButton, tone === 'quiet' && s.quietButton,
       tone === 'secondary' && s.secondaryButton,
+      size === 'small' && s.smallButton,
       (disabled || busy) && s.disabled, pressed && { opacity: 0.7 }]}>
     {tone === 'neutral' && <LinearGradient colors={[c.brand, c.brand2]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
-    <Copy style={[s.buttonText, { color: tone === 'quiet' || tone === 'secondary' ? c.brand : '#ffffff' }]}>
+    <Copy style={[s.buttonText, size === 'small' && { fontSize: 14 }, { color: tone === 'quiet' ? c.muted : tone === 'secondary' ? c.fg : '#ffffff' }]}>
       {busy ? busyTitle : title}
     </Copy>
   </Pressable>;
@@ -50,19 +52,19 @@ export function Status({ text, tone = 'neutral' }: { text: string; tone?: 'neutr
 
 export function Logo({ threat = false, markOnly = false }: { threat?: boolean; markOnly?: boolean }) {
   return <View style={s.brand} accessibilityLabel="Argus">
-    <Svg width={28} height={28} viewBox="0 0 40 40" fill="none" accessible={false}>
+    <Svg width={24} height={24} viewBox="0 0 40 40" fill="none" accessible={false}>
       <Path d="M20 4.5 L35.5 34.5 H4.5 Z" stroke={c.fg} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
       <Path d="M11 24.5 Q20 16.5 29 24.5 Q20 32.5 11 24.5 Z" stroke={c.fg} strokeWidth={2.1} strokeLinejoin="round" />
       <Circle cx={20} cy={24.5} r={threat ? 4.05 : 3} fill={threat ? c.threat : c.fg} />
     </Svg>
-    {!markOnly && <Copy style={{ fontFamily: f.semibold, fontSize: 24, letterSpacing: -0.5 }}>Argus</Copy>}
+    {!markOnly && <Copy style={{ fontFamily: f.semibold, fontSize: 22, letterSpacing: -0.5 }}>Argus</Copy>}
   </View>;
 }
 
 export const common = StyleSheet.create({
   stack: { gap: 20 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  title: { fontFamily: f.display, fontSize: 38, lineHeight: 42, letterSpacing: -0.7 },
+  title: { fontFamily: f.display, fontSize: 36, lineHeight: 40, letterSpacing: -0.4 },
   muted: { color: c.muted, lineHeight: 23 },
   mono: { fontFamily: f.mono },
   divider: { borderTopWidth: 1, borderTopColor: c.line, paddingTop: 16 },
@@ -76,16 +78,17 @@ const s = StyleSheet.create({
   label: { fontFamily: f.semibold, fontSize: 13, lineHeight: 20, color: c.muted },
   panel: { backgroundColor: c.ink, borderWidth: 1, borderColor: c.line, borderRadius: 20, padding: 22, gap: 16,
     boxShadow: '0px 2px 8px rgba(22,25,31,0.025)' },
-  button: { minHeight: 52, paddingHorizontal: 16, paddingVertical: 15, borderWidth: 1, borderColor: c.brand,
+  button: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 12, borderWidth: 1, borderColor: c.brand,
     borderRadius: 12, overflow: 'hidden', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center',
     boxShadow: '0px 5px 18px rgba(37,99,235,0.13)' },
   buttonText: { fontFamily: f.semibold, fontSize: 15, textAlign: 'center' },
+  smallButton: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 10 },
   threatButton: { backgroundColor: c.threat, borderColor: c.threat },
   quietButton: { borderColor: 'transparent', minHeight: 44, paddingVertical: 12, backgroundColor: 'transparent', boxShadow: 'none' },
-  secondaryButton: { backgroundColor: c.brandSoft, borderColor: c.brandSoft, boxShadow: 'none' },
+  secondaryButton: { backgroundColor: c.ink, borderColor: c.lineStrong, boxShadow: 'none' },
   disabled: { opacity: 0.45 },
   input: { minHeight: 52, paddingVertical: 14, paddingHorizontal: 0, borderBottomWidth: 1, borderColor: c.lineStrong, color: c.fg,
     backgroundColor: 'transparent', fontFamily: f.body, fontSize: 15 },
   status: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, backgroundColor: c.ink, paddingVertical: 7, paddingHorizontal: 12 },
-  brand: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  brand: { flexDirection: 'row', gap: 6, alignItems: 'center' },
 });

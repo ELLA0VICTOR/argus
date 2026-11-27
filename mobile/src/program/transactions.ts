@@ -3,11 +3,22 @@ import bs58 from 'bs58';
 import { transactionErrorMessage, UNKNOWN_TRANSACTION_MESSAGE } from './errors.ts';
 
 export const DEVNET_GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
+// SecureStore permits only letters, numbers, dots, underscores and hyphens.
+export const PENDING_TRANSACTION_KEY = 'argus.pending-devnet-transaction';
 export type TransactionState = {
   phase: 'idle' | 'preparing' | 'wallet' | 'sending' | 'confirming' | 'confirmed' | 'failed' | 'unknown';
   signature?: string; message?: string; blockhash?: string; lastValidBlockHeight?: number;
   programs?: string[];
 };
+type TransactionStore = { getItemAsync: (key: string) => Promise<string | null>; setItemAsync: (key: string, value: string) => Promise<void> };
+export async function restorePendingTransaction(store: TransactionStore): Promise<TransactionState | null> {
+  const raw = await store.getItemAsync(PENDING_TRANSACTION_KEY);
+  if (!raw) return null;
+  const state = JSON.parse(raw) as TransactionState;
+  return typeof state?.signature === 'string' && state.signature && ['sending', 'confirming', 'unknown'].includes(state.phase)
+    ? { ...state, phase: 'unknown' } : null;
+}
+export const saveTransaction = (store: TransactionStore, state: TransactionState) => store.setItemAsync(PENDING_TRANSACTION_KEY, JSON.stringify(state));
 export const transactionUrl = (signature: string) => `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
 export const transactionBusy = (state: TransactionState) => ['preparing', 'wallet', 'sending', 'confirming', 'unknown'].includes(state.phase);
 

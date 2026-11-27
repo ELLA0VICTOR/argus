@@ -269,6 +269,7 @@ argus/
 │   │   └── argus.svg
 │   ├── audits/                        # internal audit rounds + devnet verification
 │   │   ├── claude-r1.md
+│   │   ├── claude-sentinel-r1.md
 │   │   ├── codex-devnet-2026-11-27.md
 │   │   ├── codex-mobile-apk-2026-11-27.json
 │   │   ├── codex-r1-manifest-final.json
@@ -298,7 +299,9 @@ argus/
 │   │   └── smoke-sentinel.ts
 │   ├── src/
 │   │   ├── components/
+│   │   │   ├── AppChrome.tsx
 │   │   │   ├── DawnHero.tsx
+│   │   │   ├── FreezeButton.tsx
 │   │   │   ├── GuardianCall.tsx
 │   │   │   ├── Intro.tsx
 │   │   │   ├── NativeVoice.tsx
@@ -311,6 +314,7 @@ argus/
 │   │   │   ├── demo.ts
 │   │   │   ├── guardianCall.test.ts
 │   │   │   ├── guardianCall.ts
+│   │   │   ├── userMessage.ts
 │   │   │   ├── vaultMetrics.test.ts
 │   │   │   └── vaultMetrics.ts
 │   │   ├── idl/
@@ -338,7 +342,8 @@ argus/
 │   │   │   ├── Pending.tsx
 │   │   │   ├── SentinelVault.tsx
 │   │   │   ├── Settings.tsx
-│   │   │   └── Vault.tsx
+│   │   │   ├── Vault.tsx
+│   │   │   └── VaultPreview.tsx
 │   │   ├── sentinel/
 │   │   │   ├── client.ts
 │   │   │   ├── demo.test.ts
@@ -414,12 +419,14 @@ argus/
 │   ├── scripts/
 │   │   └── build-vercel.mjs
 │   ├── src/
+│   │   ├── audit-check.ts
 │   │   ├── chain.ts
 │   │   ├── db.ts
 │   │   ├── demo.ts
 │   │   ├── faucet.ts
 │   │   ├── handler.ts
 │   │   ├── keys.ts
+│   │   ├── limits.ts
 │   │   ├── rpc.ts
 │   │   ├── server.ts
 │   │   ├── setup-keys.ts
@@ -446,6 +453,7 @@ argus/
 ## Security
 
 - **Devnet only, no third-party audit.** Two independent internal audit rounds: [Claude](docs/audits/claude-r1.md), [Codex](docs/audits/codex-r1.md), and the [reconciliation](docs/audits/codex-r1-reconciliation.md).
+- **Sentinel audit.** [Round 1](docs/audits/claude-sentinel-r1.md) covers the off-chain service and the app's transaction code. It found 11 issues (2 high), all fixed and each proven by a check (`npm run check:audit`).
 - **Verified deploy.** The deployed bytecode matches the tested build (SHA-256 `831417e4…72f9`), recorded in [HANDOFF](docs/HANDOFF.md).
 - **Upgrade authority.** For the hackathon, a single developer wallet can upgrade the program. Before real funds it should move to a multisig or the program should be made immutable.
 - **Known limit.** If a thief holds both the owner key and enough guardian keys to meet the threshold, they can eventually take the funds. Keep keys on separate devices and with separate people.

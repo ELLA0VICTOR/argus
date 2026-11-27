@@ -14,15 +14,17 @@ import bs58 from "bs58";
 import { randomUUID } from "node:crypto";
 import { BN, accounts, connection, PROGRAM_ID, programFor, sendIxs } from "./chain.ts";
 import { ensureSchema, sql } from "./db.ts";
-import { DemoError, ensureMint } from "./demo.ts";
+import { DemoError, demoPublic, ensureMint } from "./demo.ts";
 import { loadKey } from "./keys.ts";
 
 const ai = loadKey("ai-guardian");
 export const ACT_AFTER_MS = 40_000;
 const SCAN_EVERY_SECS = 8;
 const DECIMALS = 6;
-// Vault layout: ai_guardian sits after owner(82) + epoch + 5 guardian slots + count/threshold/epoch.
+// Vault layout: ai_guardian sits after owner(82) + epoch + 5 guardian slots + count/threshold/epoch;
+// safe_address follows it.
 const AI_GUARDIAN_OFFSET = 284;
+const SAFE_OFFSET = 316;
 
 let tables: Promise<unknown> | null = null;
 function ensureTables() {
@@ -80,28 +82,29 @@ async function log(vault: string, type: string, text: string, alertId?: string) 
   await sql`insert into watch_log (vault, at, type, text, alert_id) values (${vault}, ${Math.floor(Date.now() / 1000)}, ${type}, ${text}, ${alertId ?? null})`;
 }
 
-type VaultAcct = { owner: PublicKey; guardians: PublicKey[]; guardianCount: number; aiGuardian: PublicKey; mint: PublicKey; frozen: boolean };
+type VaultAcct = { owner: PublicKey; guardians: PublicKey[]; guardianCount: number; aiGuardian: PublicKey; safeAddress: PublicKey; mint: PublicKey; frozen: boolean };
 type WAcct = { id: BN; destination: PublicKey; amount: BN; requestedAt: BN; executesAt: BN; rentPayer: PublicKey };
 
 async function readVault(vault: PublicKey): Promise<VaultAcct | null> {
   return ((await accounts(ai).vault.fetch(vault).catch(() => null)) as VaultAcct | null) ?? null;
 }
 
-/** Demo vaults use the same AI key but run their own call flow (demo.ts). */
-async function isDemoVault(vault: string) {
-  const r = await sql`select 1 from demo_sessions where id = ${vault} limit 1`.catch(() => []);
-  return r.length > 0;
-}
+/**
+ * Demo vaults use the same AI key but run their own call flow (demo.ts). They
+ * all send emergencies to the demo safe address, which outlives the demo
+ * session rows (those are deleted after a day).
+ */
+const isDemoVault = (v: VaultAcct) => v.safeAddress.toBase58() === demoPublic.safe;
 
 /** Vaults that name Sentinel's AI key as their AI guardian (demo vaults excluded). */
 export async function watchedVaults(): Promise<string[]> {
   await ensureTables();
   const all = await connection.getProgramAccounts(PROGRAM_ID, {
     filters: [{ memcmp: { offset: AI_GUARDIAN_OFFSET, bytes: ai.publicKey.toBase58() } }],
-    dataSlice: { offset: 0, length: 0 },
+    dataSlice: { offset: SAFE_OFFSET, length: 32 },
   });
-  const demo = new Set(((await sql`select id from demo_sessions`) as { id: string }[]).map((r) => r.id));
-  return all.map((a) => a.pubkey.toBase58()).filter((v) => !demo.has(v));
+  const demoSafe = new PublicKey(demoPublic.safe).toBytes();
+  return all.filter((a) => !demoSafe.every((b, i) => a.account.data[i] === b)).map((a) => a.pubkey.toBase58());
 }
 
 const fmt = (base: bigint) => (Number(base) / 10 ** DECIMALS).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -112,8 +115,13 @@ async function ownerOfTokenAccount(ta: PublicKey): Promise<string> {
   return ((r?.value?.data as ParsedAccountData | undefined)?.parsed?.info?.owner as string | undefined) ?? ta.toBase58();
 }
 
+const AGE_LOOKBACK = 1000;
+
 async function addressAgeSeconds(addr: string): Promise<number | null> {
-  const sigs = await connection.getSignaturesForAddress(new PublicKey(addr), { limit: 1000 }).catch(() => []);
+  const sigs = await connection.getSignaturesForAddress(new PublicKey(addr), { limit: AGE_LOOKBACK }).catch(() => []);
+  // A full page means a busy address: its first activity is further back than we looked,
+  // so it isn't new (an exchange deposit address, say). Without this it would look minutes old.
+  if (sigs.length >= AGE_LOOKBACK) return Number.POSITIVE_INFINITY;
   const oldest = sigs.at(-1)?.blockTime;
   return oldest ? Math.max(0, Math.floor(Date.now() / 1000) - oldest) : null;
 }
@@ -143,7 +151,10 @@ async function score(vault: string, v: VaultAcct, w: WAcct, destOwner: string) {
   const odd = hour < 6 || hour >= 23;
   signals.push({ id: "odd_hour", label: `Requested at ${String(hour).padStart(2, "0")}:00 Lagos time${odd ? ", outside usual hours" : ""}`, weight: odd ? 12 : 4 });
 
-  const total = Math.min(100, signals.reduce((a, s) => a + s.weight, 0));
+  let total = Math.min(100, signals.reduce((a, s) => a + s.weight, 0));
+  // Floors, so a thief can't stay under "critical" just by using an older address:
+  // most of the vault to somewhere it has never paid, or a lookalike, is the theft pattern.
+  if ((share >= 50 && !known.includes(destOwner)) || look) total = Math.max(total, 70);
   const risk = total >= 70 ? "critical" : total >= 45 ? "high" : total >= 25 ? "medium" : "low";
   const parts = [`This sends ${share}% of the vault`, `to ${short(destOwner)}`];
   if (age === null || (age !== null && age < 86_400)) parts.push("a brand-new address");
@@ -167,7 +178,7 @@ export async function scanVault(vault: string, force = false) {
   if (claimed.length === 0) return;
   const pk = new PublicKey(vault);
   const v = await readVault(pk);
-  if (!v || !v.aiGuardian.equals(ai.publicKey) || (await isDemoVault(vault))) return;
+  if (!v || !v.aiGuardian.equals(ai.publicKey) || isDemoVault(v)) return;
 
   const ws = (await accounts(ai).withdrawal.all([{ memcmp: { offset: 8, bytes: vault } }]).catch(() => [])) as { publicKey: PublicKey; account: WAcct }[];
   const open = (await sql`select id, withdrawal from watch_alerts where vault = ${vault} and status in ('open', 'dismissed', 'acting')`) as { id: string; withdrawal: string }[];

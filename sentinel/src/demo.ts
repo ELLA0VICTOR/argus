@@ -115,7 +115,11 @@ async function snapshot(r: SessionRow) {
   await emit(r.id, { type: "state", vault: v?.value.uiAmountString ?? "0", thief: t?.value.uiAmountString ?? "0", frozen: !!acct?.frozen, pending: pending.length });
 }
 
-export async function createSession(ip: string) {
+const MAX_SESSIONS_PER_HOUR = 30;
+
+export async function createSession(rawIp: string) {
+  const { visitorKey } = await import("./limits.ts");
+  const ip = visitorKey(rawIp);
   await ensureSchema();
   // Housekeeping: day-old demos and their events go.
   await sql`delete from demo_sessions where created_at < now() - interval '1 day'`;
@@ -123,6 +127,9 @@ export async function createSession(ip: string) {
   if (n >= MAX_PER_IP_PER_HOUR) throw new DemoError(429, "You've started a lot of demos this hour. Try again a little later.");
   const [{ live }] = (await sql`select count(*)::int as live from demo_sessions where created_at > now() - make_interval(mins => ${SESSION_TTL_MIN})`) as { live: number }[];
   if (live >= MAX_LIVE_SESSIONS) throw new DemoError(503, "The demo is busy right now. Try again in a few minutes.");
+  // Global hourly cap: each session costs the funder ~0.04 SOL, so this bounds what a flood can spend.
+  const [{ hour }] = (await sql`select count(*)::int as hour from demo_sessions where created_at > now() - interval '1 hour'`) as { hour: number }[];
+  if (hour >= MAX_SESSIONS_PER_HOUR) throw new DemoError(503, "The demo is busy right now. Try again in a few minutes.");
   if ((await connection.getBalance(funder.publicKey)) < 0.1e9) throw new DemoError(503, "The demo wallet needs a top-up. Please try again later.");
 
   const mint = await ensureMint();

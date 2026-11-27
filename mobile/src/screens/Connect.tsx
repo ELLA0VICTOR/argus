@@ -2,6 +2,7 @@ import { View } from 'react-native';
 import { Button, Copy, Field, Label, Panel, common } from '../components/ui';
 import type { VaultList } from '../sentinel/types';
 import { DawnHero } from '../components/DawnHero';
+import { userMessage } from '../domain/userMessage';
 
 export function Connect({ wallet, busy, error, vault, vaults, demoAvailable, onVault, onConnect, onOpen, onDemo, onSignOut }: {
   wallet: string | undefined; busy: boolean; error: string | null; vault: string; vaults: VaultList['vaults']; demoAvailable: boolean;
@@ -24,7 +25,7 @@ export function Connect({ wallet, busy, error, vault, vaults, demoAvailable, onV
         <Button title="Open entered vault" disabled={busy || !vault.trim()} onPress={() => onOpen(vault)} />
         <Button title="Sign out" tone="quiet" onPress={onSignOut} disabled={busy} />
       </> : <Button title="Connect wallet and sign in" busy={busy} busyTitle="Waiting for your wallet…" onPress={onConnect} />}
-      {error && <Copy accessibilityRole="alert">{error}</Copy>}
+      {error && <Copy accessibilityRole="alert">{userMessage(error, 'Could not connect your wallet. Please try again.')}</Copy>}
     </Panel>
     <View style={{ flex: 1 }} />
     {demoAvailable && <><Copy style={[common.muted, { textAlign: 'center', fontSize: 13 }]}>Explore sample funds, contacts and alerts without a wallet.</Copy>

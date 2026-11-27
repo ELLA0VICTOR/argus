@@ -12,9 +12,9 @@ export function ProgressTrack({ fraction, label }: { fraction: number; label: st
 }
 
 export function AllowanceMeter({ remaining, total, fraction }: { remaining: string; total: string; fraction: number }) {
-  return <View style={[common.divider, { gap: 12 }]}>
-    <Copy style={common.muted}>Instant today</Copy>
-    <Copy style={common.num}>{remaining} <Copy style={common.muted}>/ {total}</Copy></Copy>
+  return <View style={{ gap: 8 }}>
+    <View style={common.row}><Copy style={[common.muted, { fontSize: 13 }]}>Instant today</Copy>
+    <Copy style={[common.num, { fontSize: 13 }]}>{remaining} <Copy style={common.muted}>of {total}</Copy></Copy></View>
     <ProgressTrack fraction={fraction} label="Today's instant allowance remaining" />
   </View>;
 }
@@ -30,14 +30,13 @@ export function WaitProgress({ requestedAt, executesAt, now }: { requestedAt: nu
 
 export type SendRoute = 'instant' | 'trusted' | 'delayed';
 export function RouteIndicator({ selected, waitLabel, onSelect, disabled }: {
-  selected: SendRoute; waitLabel: string; onSelect: (route: SendRoute) => void; disabled: boolean;
+  selected: SendRoute | null; waitLabel: string; onSelect?: (route: SendRoute) => void; disabled: boolean;
 }) {
-  return <View accessibilityRole="radiogroup" accessibilityLabel="Transfer route" style={s.routes}>
-    {(['instant', 'trusted', 'delayed'] as const).map(route => <Pressable key={route} accessibilityRole="radio"
-      accessibilityState={{ checked: selected === route, disabled }} disabled={disabled} onPress={() => onSelect(route)}
+  return <View accessibilityRole={onSelect ? 'radiogroup' : undefined} accessibilityLabel="Transfer route" style={s.routes}>
+    {(['instant', 'trusted', 'delayed'] as const).map(route => <Pressable key={route} accessibilityRole={onSelect ? 'radio' : 'text'}
+      accessibilityState={onSelect ? { checked: selected === route, disabled } : undefined} disabled={disabled || !onSelect} onPress={() => onSelect?.(route)}
       style={[s.route, selected === route && s.selected]}>
-      <View style={[s.dot, { backgroundColor: selected === route ? c.brand : c.lineStrong }]} />
-      <Copy style={{ fontFamily: f.medium, fontSize: 12, color: selected === route ? c.brand : c.muted }}>
+      <Copy style={{ fontFamily: f.medium, fontSize: 12, color: selected === route ? c.fg : c.muted }}>
         {route === 'delayed' ? `Waits ${waitLabel}` : route === 'instant' ? 'Instant' : 'Trusted'}
       </Copy>
     </Pressable>)}
@@ -63,13 +62,13 @@ export function KeyAvatar({ label, ai = false }: { label: string; ai?: boolean }
 }
 
 const s = StyleSheet.create({
-  track: { height: 4, borderRadius: 2, backgroundColor: c.raised, overflow: 'hidden' },
-  fill: { height: 4, borderRadius: 2, backgroundColor: c.brand },
+  track: { height: 6, borderRadius: 3, backgroundColor: c.raised, overflow: 'hidden' },
+  fill: { height: 6, borderRadius: 3, backgroundColor: c.brand },
   routes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, borderRadius: 14, backgroundColor: c.canvas, padding: 4 },
-  route: { flex: 1, minWidth: 85, minHeight: 48, alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 10 },
-  selected: { backgroundColor: c.brandSoft },
+  route: { flex: 1, minWidth: 70, minHeight: 44, alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 10 },
+  selected: { backgroundColor: c.ink },
   dot: { width: 7, height: 7, borderRadius: 4 },
   event: { flexDirection: 'row', gap: 12 }, rail: { width: 12, alignItems: 'center', paddingTop: 7 },
   connector: { position: 'absolute', width: 1, backgroundColor: c.line, top: 10, bottom: -7 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
 });

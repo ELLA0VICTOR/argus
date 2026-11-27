@@ -289,7 +289,7 @@ Approved by Victor on 2026-11-27. They cover what the live build does today. The
   - `POST /internal/helius/webhook` (Helius raw webhook, `Authorization` header = `HELIUS_WEBHOOK_SECRET`);
   - a scan of the vault whenever a client reads its alerts (at most every 8 s per vault);
   - a long-lived server also scans every 10 s.
-- **Scoring:** each new pending withdrawal is scored into an Alert with the shape above. The signals used are `new_address`, `share_of_vault`, `first_destination`, `lookalike` and `odd_hour`.
+- **Scoring:** each new pending withdrawal is scored into an Alert with the shape above. The signals used are `new_address`, `share_of_vault`, `first_destination`, `lookalike` and `odd_hour`. **Floors (audit S-1):** moving ≥ 50% of the vault to a destination it has never paid, or to a lookalike of a trusted or paid address, is at least critical, however old the destination is.
 - **The AI key acts on its own decision only:** a **critical** alert still open 45 seconds after it was raised gets `cancel_withdrawal` and then `freeze`, signed by the AI key.
   - The 45 s window replaces the phone call's no-answer timeout. It fits inside one serverless invocation.
   - High-risk alerts are raised but never auto-cancelled.

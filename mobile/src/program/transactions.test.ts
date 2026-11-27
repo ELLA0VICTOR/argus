@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
-import { DEVNET_GENESIS, checkTransaction, parseAmount, runTransaction, transactionBusy, type TransactionState } from './transactions.ts';
+import { DEVNET_GENESIS, checkTransaction, parseAmount, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from './transactions.ts';
 import { ARGUS_PROGRAM_ID } from './client.ts';
 import { ARGUS_ERRORS } from './errors.ts';
 import { readFileSync } from 'node:fs';
 import { URL } from 'node:url';
+import { formatTypedAmount } from '../domain/amountInput.ts';
 
 test('the required genesis matches the independently queried deployment cluster', () => {
   const observed = JSON.parse(readFileSync(new URL('../../../docs/audits/devnet-2026-11-27/deployment.json', import.meta.url), 'utf8'));
@@ -42,6 +43,25 @@ test('MWA signing pipeline persists the signature before one preflight-checked s
   assert.equal(result.phase, 'confirmed'); assert.equal(f.broadcasts(), 1); assert(result.signature);
   assert.deepEqual(f.states.map(s => s.phase), ['preparing', 'wallet', 'sending', 'confirming', 'confirmed']);
   assert(!transactionBusy(result));
+});
+
+test('native SecureStore can persist a signed transaction and restore its retry block after restart', async () => {
+  const values = new Map<string, string>();
+  const validKey = (key: string) => { if (!/^[\w.-]+$/.test(key)) throw new Error('Invalid key provided to SecureStore'); };
+  const store = {
+    getItemAsync: async (key: string) => { validKey(key); return values.get(key) ?? null; },
+    setItemAsync: async (key: string, value: string) => { validKey(key); values.set(key, value); },
+  };
+  assert.equal(await restorePendingTransaction(store), null);
+  const f = fixture();
+  f.connection.confirmTransaction = async () => { throw new Error('lost connection'); };
+  const result = await runTransaction(f.connection, f.signer.publicKey, [f.ix], f.sign, f.emit,
+    async state => { await saveTransaction(store, state); await f.persist(state); });
+  assert.equal(result.phase, 'unknown');
+  const restored = await restorePendingTransaction(store);
+  assert(restored); assert.equal(restored.signature, result.signature); assert(transactionBusy(restored));
+  await saveTransaction(store, { ...result, phase: 'confirmed' });
+  assert.equal(await restorePendingTransaction(store), null);
 });
 
 test('a non-devnet RPC is rejected before a wallet prompt or broadcast', async () => {
@@ -108,4 +128,25 @@ test('token parsing never rounds or silently accepts more precision than the min
   assert.equal(parseAmount('12.000001', 6), 12_000_001n);
   assert.equal(parseAmount('18446744073709551615', 0), (1n << 64n) - 1n);
   for (const text of ['0', '-1', '1e3', '1,000', '0.0000001', '18446744073709551616']) assert.throws(() => parseAmount(text, text.includes('.') ? 6 : 0));
+});
+
+test('Send groups typed and pasted amounts while preserving the exact transaction value', () => {
+  for (const [input, displayed, units] of [
+    ['12000.50', '12,000.50', 12_000_500_000n],
+    ['1,2345.00', '12,345.00', 12_345_000_000n],
+    ['.25', '0.25', 250_000n],
+    ['00012000.500000', '12,000.500000', 12_000_500_000n],
+    ['18446744073709.551615', '18,446,744,073,709.551615', (1n << 64n) - 1n],
+  ] as const) {
+    const formatted = formatTypedAmount(input);
+    assert.equal(formatted, displayed);
+    assert.equal(parseAmount(formatted.replace(/,/g, ''), 6), units);
+  }
+  assert.equal(formatTypedAmount(''), '');
+  assert.equal(formatTypedAmount('12000.'), '12,000.');
+  assert.equal(formatTypedAmount('12000.00'), '12,000.00');
+  for (const invalid of ['-1', '1e3', '1.2.3', '0.0000001']) {
+    assert.equal(formatTypedAmount(invalid), invalid);
+    assert.throws(() => parseAmount(formatTypedAmount(invalid).replace(/,/g, ''), 6));
+  }
 });

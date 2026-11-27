@@ -11,7 +11,9 @@ Notifications.setNotificationHandler({ handleNotification: async () => ({
 export async function createAlertChannel() {
   if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync(ALERT_CHANNEL, {
     name: 'Argus alerts', importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250], sound: 'default',
+    // A channel sound is a bundled resource filename. Omit it for Android's default;
+    // the literal "default" is incorrectly looked up as a custom sound by this SDK.
+    vibrationPattern: [0, 250, 250, 250],
   });
 }
 

@@ -11,6 +11,21 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - **Demo vault address:** _not created yet_
 
 ## Log
+- 2026-11-27 — Claude — **Sentinel audit round 1:** `docs/audits/claude-sentinel-r1.md`. It found 11 issues and fixed them all; each has a check in `npm run check:audit` (18/18).
+  - **The two high findings:**
+    - **S-1:** a thief could avoid the AI's auto-cancel by using an old address. Fixed with scoring floors: ≥ 50% of the vault to a never-paid destination, or a lookalike, is critical.
+    - **S-2:** the RPC relay would send any transaction. Relayed sends and simulations must now call Argus, with only the ATA, compute-budget, memo and Lighthouse programs alongside.
+  - **Other fixes:**
+    - IPv6 /64 visitor keys (so the faucet stores `…::/64`);
+    - global daily faucet caps (300 claims, 15 SOL drips) and 30 demo sessions per hour;
+    - atomic faucet claims;
+    - demo vaults recognized by the demo safe address;
+    - busy addresses aren't "new";
+    - per-visitor limits on public routes, and 4 event streams per visitor;
+    - a constant-time webhook secret check;
+    - health no longer shows the database host, and credentials are redacted from logs.
+  - **Regressions:** watcher 13/13, demo smoke 9/9, demo races and timeout pass, full in-app devnet run 22/22.
+  - **Codex:** relayed `sendTransaction` now refuses transactions that don't call Argus. If mobile relays anything else, send it straight to an RPC.
 - 2026-11-27 — Claude — **Sentinel watches real vaults.** See `docs/SENTINEL-API.md`, "Hackathon build": approved by Victor on 2026-11-27.
   - **What's watched:** every vault whose AI guardian is Sentinel's key. Demo vaults are excluded.
   - **Scoring:** each new pending withdrawal becomes an alert, using `new_address`, `share_of_vault`, `first_destination`, `lookalike` and `odd_hour`.
@@ -263,3 +278,19 @@ Append newest entries at the top. Use this format: `YYYY-MM-DD HH:MM — who —
 - 2026-11-27 — Codex — **Development APK built successfully.** EAS build `992ad6a2-8847-4916-9669-5cfe0b0f5c40` finished, including native LiveKit/WebRTC, Nitro and crypto compilation. Download: https://expo.dev/artifacts/eas/c5rPBcDhs1LW--wJl5bAwqpfjT8vVH7cQVDq9vayEPw.apk . Install on Android, run `npm.cmd start` from mobile on the computer, and connect the installed Argus development client on the same Wi-Fi. The demo uses the hosted Sentinel and needs no connected MWA wallet; ordinary vault operations still require an Android MWA wallet. Source fixes were pushed as `bfcb56b`. Hosted smoke remains 8/8; local checks 63/63 plus Expo Doctor 20/20. APK existence/native compilation is verified; physical-phone MWA, audio, notification behavior, FCM and a standalone preview/store build remain pending.
 
 - 2026-11-27 — Codex — **APK artifact integrity verified.** Downloaded the successful development APK into ignored `mobile/.program-check/argus-development.apk`: 286,450,864 bytes; SHA-256 `a27306a3131c39953b068ff4289f786ec3c740fbcd3e6623f742032f99ebdd38`. ZIP integrity passes; binary manifest contains `com.argus.vault`; native libraries cover arm64-v8a, armeabi-v7a, x86 and x86_64. Readable evidence only: `docs/audits/codex-mobile-apk-2026-11-27.json`. Physical-device MWA, microphone/audio and notifications are not yet tested. No APK or native binary is added to Git or docs/audits.
+
+
+### 2026-11-27 — Codex — Mobile aligned with the web phone layout
+
+- Compared the hosted /app at 390px with the native entry. After the existing intro, Android now opens the labelled read-only Savings preview: compact Connect + Live demo header, five icon tabs, plain balance card, side-by-side Send/Deposit, allowance meter, waiting rows and activity timeline. Removed the extra offline sample and mock contact-settings choices from the main entry; preview actions connect the wallet rather than fabricate success.
+- Shared web wording for Home, Send, Activity, Guardians, Settings, vault setup and the theft demo. Send now derives its route from amount, allowance and active trust with exact BigInts; guardians/frozen vaults see the same read-only Send explanation. The native call and decision-button fallback remain. Returning from the disposable live demo preserves the wallet view.
+- Fixed a real native startup failure: the pending-transaction SecureStore key contained colons, which Expo rejects. Both transaction flows use the shared valid key and pending restore/save helper. A strict-key storage regression covers signature persistence before broadcast and the restart retry block. Raw transport/SDK diagnostics are replaced by short user messages, startup dismiss buttons removed, and confirmed notices auto-clear after six seconds. Unknown transaction status remains visible and blocking.
+- Verification: 66/66 tests, TypeScript, Android production bundle; layout checks for all five tabs at 320/390/430px plus Connect/demo entry and Instant/Trusted/delayed preview routes passed. Browser layout checks render the actual presentation components through an ignored React Native Web harness with SVG/gradient adapters; they are not a claim of physical Android validation. Test harnesses, screenshots and bundles remain under ignored mobile/.program-check/ or mobile/dist/, never docs/audits/.
+- Victor can reload the existing development APK from Metro; these changes introduce no native dependencies. Physical-phone appearance, MWA and microphone checks remain for the installed app.
+
+
+### 2026-11-27 — Codex — Phone UI corrections and notification sound
+
+- Freeze now uses one shared, left-aligned button with the web snowflake SVG, a subtle surface and border, and a 44px minimum target in preview and live vault screens. The header Live demo action is removed; the bottom Home link remains for disconnected and connected wallets. Connect reuses the Send button component and its 12px corners. Logo/wordmark gap reduced to 6px.
+- Fixed notification channel configuration: the installed Expo Android native customSoundExists treats the literal sound value default as a resource filename and logs Custom sound default not found in native app. Omitting channel sound selects Settings.System.DEFAULT_NOTIFICATION_URI. Channel ID, importance, vibration and per-notification default sound remain. No custom audio asset or APK rebuild is needed.
+- Checks: TypeScript and presentation harness at 320/390/430px pass, including visible Freeze SVG, matching 12px Connect corners, absence of the header demo action and the working bottom demo entry. The phone inspector target was visible but runtime requests did not respond, so historical device log capture and on-phone confirmation of the sound warning are not claimed. Reload the development client to verify.

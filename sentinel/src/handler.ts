@@ -3,7 +3,9 @@
 // "steal my wallet" demo. The full client API is in docs/SENTINEL-API.md.
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { PROGRAM_ID, connection } from "./chain.ts";
-import { checkDb, describeError } from "./db.ts";
+import { checkDb, describeError, redact } from "./db.ts";
+import { holdSlot, limit } from "./limits.ts";
+import { timingSafeEqual } from "node:crypto";
 import { faucet } from "./faucet.ts";
 import { relayRpc } from "./rpc.ts";
 import { dismiss, heliusWebhook, listAlerts, watchlog } from "./watch.ts";
@@ -87,9 +89,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** GET /v1/demo/:id/events: Server-Sent Events, read from the database. */
 async function stream(req: IncomingMessage, res: ServerResponse, id: string, after: number) {
+  // Each open stream polls the database about once a second: cap them per visitor.
+  const release = holdSlot("stream", clientIp(req), 4);
+  req.on("close", release);
   try {
     await load(id);
   } catch {
+    release();
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
     res.write(`data: ${JSON.stringify({ t: Date.now(), type: "log", text: "This demo has expired. Start a new one.", tone: "threat" })}\n\n`);
     return void res.end();
@@ -120,6 +126,7 @@ async function stream(req: IncomingMessage, res: ServerResponse, id: string, aft
     }
     await sleep(700);
   }
+  release();
   res.end();
 }
 
@@ -159,20 +166,26 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
     // GET /v1/vaults/:vault/alerts?status=open|all   (scans the vault first, at most every 8 s)
     if (req.method === "GET" && parts[0] === "v1" && parts[1] === "vaults" && parts[3] === "alerts" && parts.length === 4) {
+      limit("alerts", clientIp(req), 60, 60_000);
       return json(res, 200, await listAlerts(parts[2], url.searchParams.get("status") === "all" ? "all" : "open"));
     }
     // GET /v1/vaults/:vault/watchlog
     if (req.method === "GET" && parts[0] === "v1" && parts[1] === "vaults" && parts[3] === "watchlog" && parts.length === 4) {
+      limit("watchlog", clientIp(req), 60, 60_000);
       return json(res, 200, await watchlog(parts[2]));
     }
     // POST /v1/alerts/:id/dismiss  { wallet, signature, ts }
     if (req.method === "POST" && parts[0] === "v1" && parts[1] === "alerts" && parts[3] === "dismiss" && parts.length === 4) {
+      limit("dismiss", clientIp(req), 10, 60_000);
       return json(res, 200, await dismiss(parts[2], await readJson(req)));
     }
     // POST /internal/helius/webhook   (Authorization must equal HELIUS_WEBHOOK_SECRET)
     if (req.method === "POST" && url.pathname === "/internal/helius/webhook") {
       const secret = process.env.HELIUS_WEBHOOK_SECRET;
-      if (!secret || req.headers.authorization !== secret) return fail(res, 401, "UNAUTHORIZED", "Bad webhook secret.");
+      const given = Buffer.from(String(req.headers.authorization ?? ""));
+      const want = Buffer.from(secret ?? "");
+      // Constant-time comparison, so the secret can't be guessed byte by byte from timing.
+      if (!secret || given.length !== want.length || !timingSafeEqual(given, want)) return fail(res, 401, "UNAUTHORIZED", "Bad webhook secret.");
       return json(res, 200, await heliusWebhook(await readJsonLarge(req)));
     }
 
@@ -206,11 +219,13 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
       }
       // POST /v1/demo/:id/call    { status?: "connected" | "ended", who?: "argus" | "owner", text? }
       if (req.method === "POST" && parts[3] === "call" && parts.length === 4) {
+        limit("demo-call", clientIp(req), 120, 60_000);
         return json(res, 200, await relayCall(id, await readJson(req)));
       }
       // POST /v1/demo/:id/attack                 { kind }
       // POST /v1/demo/:id/attack/:nonce          { signature }
       if (req.method === "POST" && parts[3] === "attack") {
+        limit("demo-attack", clientIp(req), 30, 60_000);
         const body = await readJson(req);
         if (parts.length === 4) return json(res, 200, await prepareAttack(id, String(body.kind) as AttackKind));
         if (parts.length === 5) return json(res, 200, await submitAttack(id, parts[4], String(body.signature ?? "")));
@@ -221,7 +236,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
   } catch (e) {
     if (e instanceof DemoError) return fail(res, e.status, "DEMO_ERROR", e.message);
     const err = e as Error & { cause?: { code?: string } };
-    console.error("[sentinel] error:", err.message, err.cause?.code ? `(cause: ${err.cause.code})` : "");
+    console.error("[sentinel] error:", redact(String(err.message)), err.cause?.code ? `(cause: ${err.cause.code})` : "");
     if (!res.headersSent) fail(res, 500, "INTERNAL", "Something went wrong. Please try again.");
   }
 }

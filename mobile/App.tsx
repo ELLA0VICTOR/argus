@@ -28,12 +28,13 @@ import { colors as c, fonts as f } from './src/theme';
 import { LiveApp } from './src/screens/LiveApp';
 import { TransactionNotice } from './src/components/TransactionNotice';
 import { programClient, connection } from './src/program/runtime';
-import { checkTransaction, runTransaction, transactionBusy, type TransactionState } from './src/program/transactions';
+import { checkTransaction, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from './src/program/transactions';
 import { signWalletTransaction } from './src/services/wallet';
 import { PublicKey } from '@solana/web3.js';
 import * as SecureStore from 'expo-secure-store';
 import { Intro } from './src/components/Intro';
 import { LiveDemo } from './src/screens/LiveDemo';
+import { userMessage } from './src/domain/userMessage';
 
 type Tab = 'vault' | 'pending' | 'alerts' | 'guardians' | 'settings';
 type Route = Tab | 'connect' | 'alert';
@@ -70,9 +71,9 @@ function Experience() {
   useEffect(() => { if (incoming && !chainBusy) setMode('sentinel'); }, [incoming, chainBusy]);
   return <>
     {linkError && <Copy accessibilityRole="alert" style={{ padding: 20 }}>{linkError}</Copy>}
-    {mode === 'live-demo' ? <LiveDemo onBusy={setChainBusy} onExit={() => setMode('live')} />
-      : mode === 'live' ? <LiveApp demoAvailable={!!mockSentinel} onBusy={setChainBusy} onLiveDemo={() => setMode('live-demo')} onDemo={() => setMode('demo')} onSentinel={() => setMode('sentinel')} />
-      : <Shell onBusy={setChainBusy} startDemo={mode === 'demo'} incoming={incoming} onIncomingHandled={() => setIncoming(null)} onExit={() => { setIncoming(null); setMode('live'); }} />}
+    {(mode === 'live' || mode === 'live-demo') && <View style={{ flex: 1, display: mode === 'live' ? 'flex' : 'none' }}><LiveApp active={mode === 'live'} onBusy={setChainBusy} onLiveDemo={() => setMode('live-demo')} /></View>}
+    {mode === 'live-demo' && <LiveDemo onBusy={setChainBusy} onExit={() => setMode('live')} />}
+    {(mode === 'sentinel' || mode === 'demo') && <Shell onBusy={setChainBusy} startDemo={mode === 'demo'} incoming={incoming} onIncomingHandled={() => setIncoming(null)} onExit={() => { setIncoming(null); setMode('live'); }} />}
   </>;
 }
 
@@ -100,9 +101,8 @@ function Shell({ startDemo, incoming, onIncomingHandled, onExit, onBusy }: {
   const [ringAlertId, setRingAlertId] = useState('');
   const chainLocked = transactionBusy(chainTx);
   useEffect(() => { onBusy(chainLocked || callActive); }, [chainLocked, callActive, onBusy]);
-  useEffect(() => { void SecureStore.getItemAsync('argus:pending-devnet-transaction').then(value => {
-    if (!value) return; const pending = JSON.parse(value) as TransactionState;
-    if (pending.signature && ['sending', 'confirming', 'unknown'].includes(pending.phase)) setChainTx({ ...pending, phase: 'unknown' });
+  useEffect(() => { void restorePendingTransaction(SecureStore).then(pending => {
+    if (pending) setChainTx(pending);
   }).catch(() => setError('Check recent wallet activity before sending another transaction.')); }, []);
 
   useEffect(() => { void sentinel.restore().catch(e => setError(e instanceof Error ? e.message : 'Could not restore the secure session.')).finally(() => setReady(true)); }, []);
@@ -191,8 +191,8 @@ function Shell({ startDemo, incoming, onIncomingHandled, onExit, onBusy }: {
         return [await programClient.cancelWithdrawal(signer, request)];
       })();
       const result = await runTransaction(connection, signer, instructions, transaction => signWalletTransaction(connected, transaction), setChainTx,
-        pending => SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(pending)));
-      await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(result))
+        pending => saveTransaction(SecureStore, pending));
+      await saveTransaction(SecureStore, result)
         .catch(() => setError('Transaction status could not be saved. Keep its Explorer link; the on-chain result above still applies.'));
       return result;
     } catch (e) { const failed: TransactionState = { phase: 'failed', message: e instanceof Error ? e.message : 'Could not prepare this protective action.' }; setChainTx(failed); return failed; }
@@ -250,9 +250,9 @@ function Shell({ startDemo, incoming, onIncomingHandled, onExit, onBusy }: {
     {sentinel.mock && <View style={s.demo}><Copy style={s.demoText}>Sample alerts · No remote service</Copy></View>}
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView key={`${visibleRoute}:${selectedVault}:${alertId}:${credential?.wallet}`} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        {error && <View style={{ gap: 8, marginBottom: 18 }}><Copy accessibilityRole="alert">{error}</Copy><Button title="Dismiss message" tone="quiet" onPress={() => setError(null)} /></View>}
+        {error && <Copy accessibilityRole="alert" style={{ marginBottom: 18 }}>{userMessage(error, 'Could not complete this action. Please try again.')}</Copy>}
         <TransactionNotice state={chainTx} onCheck={() => { void checkTransaction(connection, chainTx).then(async next => {
-          setChainTx(next); await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(next));
+          setChainTx(next); await saveTransaction(SecureStore, next);
         }).catch(() => setError('Could not check confirmation. Keep the signature and check again.')); }} />
         {pendingAlert && !credential && <Copy style={{ color: c.muted, marginBottom: 16 }}>Sign in to review the alert opened from your notification.</Copy>}
         {ready ? content : <ActivityIndicator color={c.fg} />}

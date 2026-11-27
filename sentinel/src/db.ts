@@ -32,6 +32,14 @@ export const dbHost = (() => {
 
 export const sql = neon(DB_URL);
 
+/** Removes anything that looks like a credential: connection strings and API keys. */
+export function redact(text: string): string {
+  return text
+    .replace(/postgres(ql)?:\/\/\S+/gi, "<db-url>")
+    .replace(/(api[-_]?key=)[^&\s"']+/gi, "$1<redacted>")
+    .replace(/https?:\/\/[^\s"']*helius[^\s"']*/gi, "<rpc-url>");
+}
+
 /**
  * Walks an error's cause chain (the Neon driver wraps fetch errors in
  * `sourceError`, and fetch puts the network reason in `cause`) and returns a
@@ -45,16 +53,18 @@ export function describeError(e: unknown): string {
     if (bits.length) parts.push(bits.join(" "));
     cur = cur.sourceError ?? cur.cause;
   }
-  return parts.join(" <- ").replace(/postgres(ql)?:\/\/\S+/g, "<url>").slice(0, 400);
+  return redact(parts.join(" <- ")).slice(0, 400);
 }
 
 /** For /v1/health?deep=1: can we reach the database? */
-export async function checkDb(): Promise<{ ok: boolean; host: string; error?: string }> {
+export async function checkDb(): Promise<{ ok: boolean; error?: string }> {
   try {
     await sql`select 1`;
-    return { ok: true, host: dbHost };
+    return { ok: true };
   } catch (e) {
-    return { ok: false, host: dbHost, error: describeError(e) };
+    // The host goes to the server log only, never into the public response.
+    console.error(`[sentinel] db check failed (host ${dbHost}):`, describeError(e));
+    return { ok: false, error: describeError(e) };
   }
 }
 

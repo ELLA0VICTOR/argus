@@ -4,10 +4,19 @@ import { URL } from 'node:url';
 import { test } from 'node:test';
 import { ARGUS_ERRORS, UNKNOWN_TRANSACTION_MESSAGE, argusErrorForCode, transactionErrorMessage } from './errors.ts';
 import { RESERVED_PROGRAM_ID } from '../sentinel/rules.ts';
+import { userMessage } from '../domain/userMessage.ts';
 
 const OTHER_PROGRAM = '11111111111111111111111111111111';
 const invoke = (program: string, depth = 1) => `Program ${program} invoke [${depth}]`;
 const fail = (program: string, code: number) => `Program ${program} failed: custom program error: 0x${code.toString(16)}`;
+
+test('user notices retain every mapped program message and replace internal diagnostics', () => {
+  for (const error of Object.values(ARGUS_ERRORS)) assert.equal(userMessage(error.message), error.message);
+  const fallback = 'Could not complete this action. Please try again.';
+  for (const error of [new Error('Invalid key provided to SecureStore'), 'TypeError: fetch failed', 'HTTP 500: {"error":"internal"}', 'Error at node_modules/provider/index.js:12', 'Request failed at https://internal.example/rpc', 'Unexpected failure\n at provider.ts:12']) {
+    assert.equal(userMessage(error, fallback), fallback);
+  }
+});
 
 test('every code and name matches the append-only Rust enum, without using the starter IDL', () => {
   const source = readFileSync(new URL('../../../programs/argus/src/error.rs', import.meta.url), 'utf8');

@@ -6,6 +6,7 @@ import { CallDecisionGate, VoiceAttempt, type CallDecision, type CallLine, type 
 import { requestCallMicrophone, type NativeVoiceProps } from '../services/voice';
 import { colors as c } from '../theme';
 import { countdown } from '../domain/demo';
+import { userMessage } from '../domain/userMessage';
 
 export function GuardianCall({ request, submit, relay, outcome, onClose }: {
   request: GuardianCallRequest; submit: (decision: CallDecision, via: DecisionVia) => Promise<string>;
@@ -72,7 +73,7 @@ export function GuardianCall({ request, submit, relay, outcome, onClose }: {
       if (mounted.current) { stopVoice(); setResult(message); setPhase('resolved'); }
       return message;
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e.message : 'Your answer was not confirmed. Check the withdrawal before retrying.');
+      if (mounted.current) setError(userMessage(e, 'Your answer was not confirmed. Check the withdrawal before retrying.'));
       throw e;
     } finally { if (mounted.current) setDeciding(false); }
   }
@@ -98,7 +99,7 @@ export function GuardianCall({ request, submit, relay, outcome, onClose }: {
       connected: () => { clearTimeout(connectionTimer.current); setPhase('live'); if (!relayedConnected.current) { relayedConnected.current = true; relayLine({ status: 'connected' }); } },
       disconnected: () => { stopVoice(); setPhase('fallback'); }, mode: setSpeaking,
       line: line => { setLines(previous => [...previous, line].slice(-80)); relayLine(line); },
-      error: message => { stopVoice(); setPhase('fallback'); setError(previous => previous ?? message); },
+      error: message => { stopVoice(); setPhase('fallback'); setError(previous => previous ?? userMessage(message, 'Voice is unavailable. Please answer with the buttons.')); },
     }} />}
     <SafeAreaView style={s.root}><ScrollView contentContainerStyle={s.content}>
       <View style={s.identity}><Logo /><Status text={request.demo ? 'Live devnet demo' : 'Vault alert'} /></View>
