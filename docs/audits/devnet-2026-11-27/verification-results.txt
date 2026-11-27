@@ -1,0 +1,9 @@
+Reviewed Rust files changed after probes: []
+Public dump SHA256 matches observed deployment and HANDOFF.
+Both mobile IDL files exactly match upstream.
+Painting matches Argus-owned source asset exactly.
+Fresh mobile export: 9 artifact files scanned.
+PEM private keys: 0 matching files
+long secret tokens: 0 matching files
+assigned service-role tokens: 0 matching files
+literal 64-byte keypair arrays: 0 matching files

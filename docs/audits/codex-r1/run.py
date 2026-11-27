@@ -1,4 +1,4 @@
-"""Read cached build artifacts; write results/probe executable only in this directory."""
+"""Keep readable evidence here; write generated artifacts in ignored mobile scratch space."""
 from pathlib import Path
 import hashlib
 import os
@@ -6,6 +6,8 @@ import subprocess
 import sys
 
 here = Path(__file__).resolve().parent
+scratch = here.parents[2] / 'mobile/.program-check/audits/codex-r1'
+scratch.mkdir(parents=True, exist_ok=True)
 deps = Path('/home/kolev/argus-target/debug/deps')
 output = here / ('restored-results.txt' if '--restored' in sys.argv else 'results.txt')
 log = []
@@ -43,10 +45,10 @@ for name in ['argus', 'anchor_lang', 'anchor_spl', 'litesvm', 'solana_keypair', 
     if name == 'argus': continue
     externs.extend(['--extern', name + '=' + str(max(candidates, key=lambda p: p.stat().st_mtime))])
 env = dict(os.environ, CARGO_TARGET_TMPDIR='/home/kolev/argus-target/tmp', CARGO_MANIFEST_DIR=str((here / '../../../programs/argus').resolve()), CARGO_PKG_NAME='argus')
-library = here / 'libargus.rlib'
+library = scratch / 'libargus.rlib'
 compiled = run([rustc, '--edition=2021', '--crate-name=argus', '--crate-type=lib', str(here / '../../../programs/argus/src/lib.rs'), '-L', 'dependency=' + str(deps), '-o', str(library), *externs], env=env)
-args = [rustc, '--edition=2021', '--test', '-C', 'strip=symbols', str(here / 'probe.rs'), '-L', 'dependency=' + str(deps), '-o', str(here / 'probe-bin'), '--extern', 'argus=' + str(library), *externs]
+args = [rustc, '--edition=2021', '--test', '-C', 'strip=symbols', str(here / 'probe.rs'), '-L', 'dependency=' + str(deps), '-o', str(scratch / 'probe-bin'), '--extern', 'argus=' + str(library), *externs]
 if compiled and run(args, env=env):
-    run([str(here / 'probe-bin'), '--test-threads=1'])
+    run([str(scratch / 'probe-bin'), '--test-threads=1'])
 output.write_text('\n'.join(log))
 sys.exit(1 if failed else 0)

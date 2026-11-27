@@ -1,0 +1,12 @@
+{
+  "verifiedDate": "2026-11-27",
+  "rpc": "https://api.devnet.solana.com",
+  "genesisHash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "programId": "4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh",
+  "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
+  "programdataAddress": "Hu2rKJDBoXS2VPnLcTXmYoNrMTtPveLXAEbTdV7nnh7J",
+  "authority": "6X8MNjeSazjbCexkizQMwn8L2TuKLMz7NNkb8czdXhBR",
+  "lastDeploySlot": 526836877,
+  "dataLen": 389952,
+  "sha256": "831417e4dcbfd59cf82753479bf22101fca1614a41953d6fb3e8992662da72f9"
+}

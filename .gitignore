@@ -32,3 +32,10 @@ mobile/ios/
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
+
+# --- build output that lands under docs/audits (keep only readable evidence) ---
+docs/audits/**/*.o
+docs/audits/**/*.rlib
+docs/audits/**/probe-bin
+docs/audits/**/deploy/
+docs/audits/**/chrome-profile/

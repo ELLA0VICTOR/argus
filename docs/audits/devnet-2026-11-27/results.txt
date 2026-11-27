@@ -1,0 +1,184 @@
+Devnet dump SHA256 matches HANDOFF: 831417e4dcbfd59cf82753479bf22101fca1614a41953d6fb3e8992662da72f9
+$ /home/kolev/.cargo/bin/rustc --edition=2021 -A warnings -L dependency=/home/kolev/argus-target/debug/deps --extern anchor_lang=/home/kolev/argus-target/debug/deps/libanchor_lang-ae9e028591a707e6.rlib --extern anchor_spl=/home/kolev/argus-target/debug/deps/libanchor_spl-09e70cfe056ddfea.rlib --extern litesvm=/home/kolev/argus-target/debug/deps/liblitesvm-e59f807ec850b8a6.rlib --extern solana_keypair=/home/kolev/argus-target/debug/deps/libsolana_keypair-ca2bea522aa5fba4.rlib --extern solana_signer=/home/kolev/argus-target/debug/deps/libsolana_signer-3d1e4e4706df59f6.rlib --extern solana_account=/home/kolev/argus-target/debug/deps/libsolana_account-ec6e7e735bae8dd7.rlib --extern solana_transaction=/home/kolev/argus-target/debug/deps/libsolana_transaction-6a74bccbe2a77808.rlib --extern solana_message=/home/kolev/argus-target/debug/deps/libsolana_message-1d76c154017f6e18.rlib --crate-name=argus --crate-type=lib /mnt/c/Users/kolev/Desktop/argus/programs/argus/src/lib.rs -o /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/libargus.rlib
+
+$ /home/kolev/.cargo/bin/rustc --edition=2021 -A warnings -L dependency=/home/kolev/argus-target/debug/deps --extern anchor_lang=/home/kolev/argus-target/debug/deps/libanchor_lang-ae9e028591a707e6.rlib --extern anchor_spl=/home/kolev/argus-target/debug/deps/libanchor_spl-09e70cfe056ddfea.rlib --extern litesvm=/home/kolev/argus-target/debug/deps/liblitesvm-e59f807ec850b8a6.rlib --extern solana_keypair=/home/kolev/argus-target/debug/deps/libsolana_keypair-ca2bea522aa5fba4.rlib --extern solana_signer=/home/kolev/argus-target/debug/deps/libsolana_signer-3d1e4e4706df59f6.rlib --extern solana_account=/home/kolev/argus-target/debug/deps/libsolana_account-ec6e7e735bae8dd7.rlib --extern solana_transaction=/home/kolev/argus-target/debug/deps/libsolana_transaction-6a74bccbe2a77808.rlib --extern solana_message=/home/kolev/argus-target/debug/deps/libsolana_message-1d76c154017f6e18.rlib --test -C strip=symbols /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/probe.rs --extern argus=/mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/libargus.rlib -o /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/probe-bin
+
+$ /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/probe-bin --test-threads=1
+
+running 147 tests
+test cleanup_rejects_live_and_cross_vault_proposals ... ok
+test closed_withdrawal_cannot_be_revived_in_same_transaction ... ok
+test randomized_instruction_sequences_preserve_inv1_inv2 ... ok
+test stale_immediate_proposal_refunds_only_original_payer_once ... ok
+test suite_deposit::deposit_allowed_while_frozen ... ok
+test suite_deposit::deposit_by_anyone_moves_tokens_into_vault ... ok
+test suite_deposit::deposit_cannot_spend_someone_elses_tokens ... ok
+test suite_deposit::deposit_rejects_source_of_another_mint ... ok
+test suite_deposit::deposit_rejects_zero ... ok
+test suite_fuzz::fuzz_random_sequences_preserve_invariants ... ok
+test suite_governance::actions_revalidated_at_execute ... ok
+test suite_governance::add_trusted_capped_at_max ... ok
+test suite_governance::add_trusted_end_to_end_then_remove ... ok
+test suite_governance::add_trusted_rejects_owner_ai_default_and_vault ... ok
+test suite_governance::add_trusted_succeeds_when_pda_prefunded_by_griefer ... ok
+test suite_governance::add_trusted_twice_fails_already_trusted ... ok
+test suite_governance::add_trusted_vetoed_by_single_guardian ... ok
+test suite_governance::ai_cannot_propose_approve_or_veto ... ok
+test suite_governance::approve_at_exact_ttl_boundary_succeeds ... ok
+test suite_governance::approve_twice_is_rejected_never_double_counted ... ok
+test suite_governance::attack_dormant_rotate_owner_expires ... ok
+test suite_governance::attack_owner_cannot_add_trusted ... ok
+test suite_governance::attack_owner_cannot_loosen ... ok
+test suite_governance::attack_owner_cannot_rotate ... ok
+test suite_governance::attack_owner_cannot_set_guardians ... ok
+test suite_governance::attack_owner_cannot_unfreeze ... ok
+test suite_governance::attack_request_voided_by_rotation ... ok
+test suite_governance::attack_rogue_guardian_cannot_block_removal ... ok
+test suite_governance::attack_spam_requests_voided ... ok
+test suite_governance::close_proposal_rejects_substituted_rent_payer ... ok
+test suite_governance::eta_set_once_and_never_moves ... ok
+test suite_governance::execute_rejects_wrong_trusted_account ... ok
+test suite_governance::expired_proposal_closed_by_anyone_refunds_rent ... ok
+test suite_governance::governance_allowed_while_frozen ... ok
+test suite_governance::kept_guardian_can_veto_set_guardians ... ok
+test suite_governance::loosen_delay_does_not_shorten_pending_withdrawal ... ok
+test suite_governance::loosen_limits_is_delayed_and_vetoable ... ok
+test suite_governance::non_guardian_cannot_approve_or_veto ... ok
+test suite_governance::one_of_one_propose_sets_eta_immediately ... ok
+test suite_governance::owner_freeze_needs_threshold_unfreeze ... ok
+test suite_governance::passed_proposal_does_not_expire ... ok
+test suite_governance::proposal_executes_once_and_ids_increment ... ok
+test suite_governance::proposer_can_execute_own_proposal ... ok
+test suite_governance::remove_ai_is_immediate_and_revokes_it ... ok
+test suite_governance::remove_trusted_of_unknown_wallet_fails ... ok
+test suite_governance::rotate_owner_rejects_role_overlap ... ok
+test suite_governance::rotate_owner_rejects_trusted_wallet ... ok
+test suite_governance::set_ai_rejects_trusted_wallet ... ok
+test suite_governance::set_guardians_kills_old_proposals_and_removed_guardians ... ok
+test suite_governance::set_guardians_validated_like_init ... ok
+test suite_governance::set_guardians_with_five_guardians_fits ... ok
+test suite_governance::set_new_ai_is_delayed_and_validated ... ok
+test suite_governance::set_safe_address_delayed_and_validated ... ok
+test suite_governance::stale_proposal_closed_immediately ... ok
+test suite_governance::tighten_is_not_vetoable ... ok
+test suite_governance::tighten_limits_is_immediate_and_stricter_only ... ok
+test suite_init::init_allows_safe_address_that_is_another_pda ... ok
+test suite_init::init_delay_bounds_are_inclusive ... ok
+test suite_init::init_family_2_of_3_and_company_3_of_5 ... ok
+test suite_init::init_happy_path_sets_every_field ... ok
+test suite_init::init_rejects_ai_as_guardian ... ok
+test suite_init::init_rejects_ai_equal_to_owner ... ok
+test suite_init::init_rejects_classic_mint_with_token_2022_program ... ok
+test suite_init::init_rejects_default_pubkey_guardian ... ok
+test suite_init::init_rejects_default_safe_address ... ok
+test suite_init::init_rejects_delay_above_max ... ok
+test suite_init::init_rejects_delay_below_min ... ok
+test suite_init::init_rejects_duplicate_guardian ... ok
+test suite_init::init_rejects_negative_delay ... ok
+test suite_init::init_rejects_non_ata_vault_token_account ... ok
+test suite_init::init_rejects_owner_as_guardian ... ok
+test suite_init::init_rejects_safe_address_equal_to_ai ... ok
+test suite_init::init_rejects_safe_address_equal_to_owner ... ok
+test suite_init::init_rejects_safe_address_equal_to_vault ... ok
+test suite_init::init_rejects_six_guardians ... ok
+test suite_init::init_rejects_threshold_above_guardian_count ... ok
+test suite_init::init_rejects_token_2022_mint_with_classic_program ... ok
+test suite_init::init_rejects_token_2022_mint_with_token_2022_program ... ok
+test suite_init::init_rejects_vault_pda_of_another_creator ... ok
+test suite_init::init_rejects_zero_guardians ... ok
+test suite_init::init_rejects_zero_threshold ... ok
+test suite_init::init_requires_creator_signature ... ok
+test suite_init::init_safe_address_may_be_a_guardian_wallet ... ok
+test suite_init::init_same_creator_many_vaults_by_id ... ok
+test suite_init::init_same_vault_id_twice_fails ... ok
+test suite_init::init_succeeds_when_ata_precreated_and_funded_by_third_party ... ok
+test suite_init::init_without_ai_guardian_is_allowed ... ok
+test suite_instant::attack_instant_capped ... ok
+test suite_instant::attack_window_rollover ... ok
+test suite_instant::instant_rejects_destination_of_another_mint ... ok
+test suite_instant::instant_rejects_guardian_ai_and_stranger ... ok
+test suite_instant::instant_rejects_vault_ata_as_destination ... ok
+test suite_instant::instant_rejects_when_frozen ... ok
+test suite_instant::instant_rejects_zero_and_overdraw ... ok
+test suite_instant::instant_spend_overflow_is_rejected ... ok
+test suite_instant::instant_within_limit_moves_funds_and_tracks_spend ... ok
+test suite_protective::attack_owner_request_then_cancel ... ok
+test suite_protective::cancel_allowed_while_frozen ... ok
+test suite_protective::cancel_by_every_guardian ... ok
+test suite_protective::cancel_by_owner_refunds_rent_to_rent_payer ... ok
+test suite_protective::cancel_rejects_stranger_and_safe_wallet ... ok
+test suite_protective::cancel_rejects_substituted_rent_payer ... ok
+test suite_protective::cancel_rejects_withdrawal_of_another_vault ... ok
+test suite_protective::cancel_twice_fails ... ok
+test suite_protective::freeze_by_owner_guardian_or_ai ... ok
+test suite_protective::freeze_is_idempotent ... ok
+test suite_protective::freeze_rejects_stranger ... ok
+test suite_protective::frozen_blocks_all_outflows_except_sweep ... ok
+test suite_protective::inv1_balances_conserved_across_all_paths ... ok
+test suite_protective::owner_can_execute_own_withdrawal ... ok
+test suite_protective::sweep_moves_everything_to_safe_and_freezes ... ok
+test suite_protective::sweep_never_unfreezes ... ok
+test suite_protective::sweep_of_empty_vault_fails ... ok
+test suite_protective::sweep_rejects_owner_ai_and_stranger ... ok
+test suite_protective::sweep_rejects_substituted_safe_token_account ... ok
+test suite_protective::sweep_rejects_substituted_safe_wallet ... ok
+test suite_protective::sweep_when_safe_address_is_the_sweeping_guardian ... ok
+test suite_protective::sweep_without_freeze_leaves_vault_unfrozen ... ok
+test suite_protective::sweep_works_when_safe_ata_already_exists ... ok
+test suite_rollback::execute_cpi_failure_keeps_withdrawal_pending_and_rent_in_place ... ok
+test suite_rollback::instant_cpi_failure_rolls_back_window_and_spend ... ok
+test suite_trusted::trusted_record_of_other_vault_is_rejected ... ok
+test suite_trusted::trusted_record_of_other_wallet_is_rejected ... ok
+test suite_trusted::trusted_rejects_canonical_pda_with_foreign_owner ... ok
+test suite_trusted::trusted_rejects_canonical_pda_with_mismatched_vault_field ... ok
+test suite_trusted::trusted_rejects_canonical_pda_with_mismatched_wallet_field ... ok
+test suite_trusted::trusted_rejects_canonical_pda_with_truncated_data ... ok
+test suite_trusted::trusted_rejects_non_owner_and_frozen ... ok
+test suite_trusted::trusted_rejects_overdraw ... ok
+test suite_trusted::trusted_rejects_until_active_at ... ok
+test suite_trusted::trusted_rejects_untrusted_destination ... ok
+test suite_trusted::trusted_rejects_wrong_account_type_at_trusted_address ... ok
+test suite_trusted::trusted_send_goes_to_owner_address ... ok
+test suite_withdrawals::attack_owner_request_waits_full_delay ... ok
+test suite_withdrawals::execute_after_delay_by_any_cranker_and_refunds_rent ... ok
+test suite_withdrawals::execute_one_second_early_fails ... ok
+test suite_withdrawals::execute_rechecks_balance_and_stays_pending ... ok
+test suite_withdrawals::execute_rejects_stale_owner_epoch ... ok
+test suite_withdrawals::execute_rejects_substituted_destination ... ok
+test suite_withdrawals::execute_rejects_substituted_rent_payer ... ok
+test suite_withdrawals::execute_rejects_withdrawal_of_another_vault ... ok
+test suite_withdrawals::execute_twice_fails ... ok
+test suite_withdrawals::frozen_blocks_request_and_execute ... ok
+test suite_withdrawals::request_creates_pending_withdrawal ... ok
+test suite_withdrawals::request_rejects_guardian_ai_and_stranger ... ok
+test suite_withdrawals::request_rejects_zero_overdraw_bad_mint_and_vault_ata ... ok
+test suite_withdrawals::withdrawal_ids_never_reused ... ok
+
+test result: ok. 147 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 228.23s
+
+
+$ /home/kolev/.cargo/bin/rustc --edition=2021 -A warnings -L dependency=/home/kolev/argus-target/debug/deps --extern anchor_lang=/home/kolev/argus-target/debug/deps/libanchor_lang-ae9e028591a707e6.rlib --extern anchor_spl=/home/kolev/argus-target/debug/deps/libanchor_spl-09e70cfe056ddfea.rlib --extern litesvm=/home/kolev/argus-target/debug/deps/liblitesvm-e59f807ec850b8a6.rlib --extern solana_keypair=/home/kolev/argus-target/debug/deps/libsolana_keypair-ca2bea522aa5fba4.rlib --extern solana_signer=/home/kolev/argus-target/debug/deps/libsolana_signer-3d1e4e4706df59f6.rlib --extern solana_account=/home/kolev/argus-target/debug/deps/libsolana_account-ec6e7e735bae8dd7.rlib --extern solana_transaction=/home/kolev/argus-target/debug/deps/libsolana_transaction-6a74bccbe2a77808.rlib --extern solana_message=/home/kolev/argus-target/debug/deps/libsolana_message-1d76c154017f6e18.rlib --test -C strip=symbols --crate-name=argus /mnt/c/Users/kolev/Desktop/argus/programs/argus/src/lib.rs -o /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/unit-bin
+error: environment variable `CARGO_PKG_VERSION` not defined at compile time
+  --> /mnt/c/Users/kolev/Desktop/argus/programs/argus/src/lib.rs:22:1
+   |
+22 | #[program]
+   | ^^^^^^^^^^
+   |
+   = help: Cargo sets build script variables at run time. Use `std::env::var("CARGO_PKG_VERSION")` instead
+
+error: aborting due to 1 previous error
+
+
+$ /home/kolev/.cargo/bin/rustc --edition=2021 -A warnings -L dependency=/home/kolev/argus-target/debug/deps --extern anchor_lang=/home/kolev/argus-target/debug/deps/libanchor_lang-ae9e028591a707e6.rlib --extern anchor_spl=/home/kolev/argus-target/debug/deps/libanchor_spl-09e70cfe056ddfea.rlib --extern litesvm=/home/kolev/argus-target/debug/deps/liblitesvm-e59f807ec850b8a6.rlib --extern solana_keypair=/home/kolev/argus-target/debug/deps/libsolana_keypair-ca2bea522aa5fba4.rlib --extern solana_signer=/home/kolev/argus-target/debug/deps/libsolana_signer-3d1e4e4706df59f6.rlib --extern solana_account=/home/kolev/argus-target/debug/deps/libsolana_account-ec6e7e735bae8dd7.rlib --extern solana_transaction=/home/kolev/argus-target/debug/deps/libsolana_transaction-6a74bccbe2a77808.rlib --extern solana_message=/home/kolev/argus-target/debug/deps/libsolana_message-1d76c154017f6e18.rlib --test -C strip=symbols --crate-name=argus /mnt/c/Users/kolev/Desktop/argus/programs/argus/src/lib.rs -o /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/unit-bin
+
+$ /mnt/c/Users/kolev/Desktop/argus/docs/audits/devnet-2026-11-27/unit-bin --test-threads=1 --skip __anchor_private
+
+running 5 tests
+test governance::tests::timelocks_match_spec_table ... ok
+test state::tests::guardian_index_finds_every_active_slot ... ok
+test state::tests::guardian_index_ignores_unused_default_slots ... ok
+test state::tests::is_ai_false_for_default_when_ai_disabled ... ok
+test state::tests::is_owner_matches_only_owner ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.01s
+
