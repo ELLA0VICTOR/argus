@@ -66,7 +66,7 @@ test('web3.js log errors decode hex codes and distinguish CPI failures from Argu
 
 test('unknown, wallet, transport, malformed and future program errors use a status-check fallback', () => {
   for (const error of [undefined, null, '0x1770', new Error('offline'), { logs: [null, 4, 'unrelated'] },
-    { logs: [invoke(RESERVED_PROGRAM_ID), fail(RESERVED_PROGRAM_ID, 6032)] }, { err: { InstructionError: [0, 'InvalidAccountData'] } }]) {
+    { logs: [invoke(RESERVED_PROGRAM_ID), fail(RESERVED_PROGRAM_ID, 6034)] }, { err: { InstructionError: [0, 'InvalidAccountData'] } }]) {
     assert.equal(transactionErrorMessage(error, [RESERVED_PROGRAM_ID]), UNKNOWN_TRANSACTION_MESSAGE);
   }
 });

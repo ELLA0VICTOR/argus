@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import { Button, Copy, Field, Label, Panel, common } from '../components/ui';
 import type { VaultList } from '../sentinel/types';
+import { DawnHero } from '../components/DawnHero';
 
 export function Connect({ wallet, busy, error, vault, vaults, demoAvailable, onVault, onConnect, onOpen, onDemo, onSignOut }: {
   wallet: string | undefined; busy: boolean; error: string | null; vault: string; vaults: VaultList['vaults']; demoAvailable: boolean;
@@ -8,11 +9,7 @@ export function Connect({ wallet, busy, error, vault, vaults, demoAvailable, onV
   onDemo: () => void; onSignOut: () => void;
 }) {
   return <View style={[common.stack, { flex: 1 }]}>
-    <View style={{ paddingTop: 20, gap: 16 }}>
-      <Label>YOUR VAULT. YOUR TIME.</Label>
-      <Copy style={[common.title, { fontSize: 34, lineHeight: 42 }]}>Argus never sleeps,{ '\n' }so you can.</Copy>
-      <Copy style={common.muted}>Large withdrawals wait. Your guardians watch. You have time to stop a theft.</Copy>
-    </View>
+    <DawnHero />
     <Panel>
       <Label>SIGN IN WITH YOUR WALLET</Label>
       <Copy style={common.muted}>Sign a Sentinel sign-in message with the Solana wallet on your phone. This does not move funds or approve a transaction.</Copy>

@@ -36,12 +36,12 @@ export function Alerts({ vault, onOpen }: { vault: string; onOpen: (id: string) 
     {!resource.loading && !resource.error && alerts.length === 0 && <Panel><Copy>No {onlyOpen ? 'open ' : ''}alerts for this vault.</Copy></Panel>}
     {alerts.map(alert => {
       const threat = ['high', 'critical'].includes(alert.risk) && ['open', 'dismissed'].includes(alert.status);
-      return <Panel key={alert.id}>
+      return <Panel key={alert.id} style={threat ? { borderColor: c.threat } : undefined}>
         <Status text={`${alert.risk.toUpperCase()} · ${alert.status.toUpperCase()}`}
           tone={threat ? 'threat' : ['cancelled', 'voided'].includes(alert.status) ? 'safe' : alert.status === 'open' || alert.status === 'dismissed' ? 'wait' : 'neutral'} />
         <Copy style={common.amount}>{alert.withdrawal ? formatTokenAmount(alert.withdrawal.amount, alert.token) : 'Vault frozen'}</Copy>
         <Copy style={common.muted}>{alert.reason}</Copy>
-        <Copy style={[common.mono, { color: c.muted, fontSize: 11 }]}>{new Date(alert.created_at * 1000).toLocaleString()} · {alert.id}</Copy>
+        <Copy style={[common.num, { color: c.muted, fontSize: 12 }]}>{new Date(alert.created_at * 1000).toLocaleString()} · {alert.id}</Copy>
         <Button title="Review alert" onPress={() => onOpen(alert.id)} />
       </Panel>;
     })}

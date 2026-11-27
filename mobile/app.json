@@ -5,13 +5,19 @@
     "version": "0.1.0",
     "scheme": "argus",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
-    "backgroundColor": "#0a0c0f",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#ffffff",
+    "icon": "./assets/icon.png",
     "platforms": ["android"],
     "android": {
       "package": "com.argus.vault",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": ["android.permission.RECORD_AUDIO", "android.permission.VIBRATE"],
+      "blockedPermissions": ["android.permission.CAMERA"],
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#ffffff" }
     },
-    "plugins": ["expo-font", "expo-secure-store", ["expo-notifications", { "defaultChannel": "argus-alerts" }]]
+    "plugins": ["expo-font", "expo-secure-store", ["expo-notifications", { "defaultChannel": "argus-alerts", "icon": "./assets/notification-icon.png" }],
+      ["@livekit/react-native-expo-plugin", { "android": { "audioType": "communication", "enableScreenShareService": false } }],
+      "@config-plugins/react-native-webrtc"]
   }
 }

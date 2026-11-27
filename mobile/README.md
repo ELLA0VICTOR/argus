@@ -1,131 +1,117 @@
 # Argus Android
 
-Native Expo / React Native app with MWA wallet sign-in, Sentinel contacts and alerts, push routing, and an interactive local demo. The client implements `../docs/SENTINEL-API.md`; the service and on-chain program are not deployed yet.
+Native Expo / React Native app with live Solana devnet transactions through Mobile Wallet Adapter, plus a separate Sentinel alerts/contact client and a labelled sample vault.
 
-## Run on Android
+The design follows `../docs/DESIGN.md`: white rounded cards on the soft canvas, Argus blue, EB Garamond on the painted hero and page titles, and Inter for body text and amounts. JetBrains Mono is reserved for addresses/signatures. The painting is Argus’s own `app/public/img/hero-dawn.webp`; logo paths match `app/src/components/Logo.tsx`. No other product’s imagery or copy is used. `npm.cmd run assets:brand` renders launcher/adaptive/notification icons from those paths. The ink-logo intro respects reduced motion.
 
-Use Node 24 LTS and npm. Windows PowerShell may require `npm.cmd` / `npx.cmd` instead of the `.ps1` launchers.
+Home shares the web app’s Protected/Frozen status pill, today’s instant-allowance meter, thin wait-progress bars and recent-activity dot timeline. Guardian keys use round initials avatars; the AI uses the Argus mark. Red identifies suspicious items and their Cancel action, amber is reserved for countdowns, and green means done/protected. The live transaction timeline shows up to ten confirmed devnet signatures with Explorer links; it does not infer action names from signatures. Unavailable history is shown explicitly and does not block the vault read. Send keeps the explicit route choice in one card, highlighting **Instant / Trusted / Waits 24h** (the wait label follows the actual vault delay). The transaction and wallet checks are unchanged.
+
+## Run and build
+
+Use Node 24 and npm. Windows PowerShell may require `npm.cmd` / `npx.cmd`.
 
 ```powershell
 cd mobile
 npm.cmd ci
 npx.cmd eas-cli@latest login
 npx.cmd eas-cli@latest init
-npx.cmd eas-cli@latest build --platform android --profile development
+npm.cmd run build:development
 npm.cmd start
 ```
 
-Install the development APK on a physical Android phone with an MWA-compatible devnet wallet. Connect the development client to Metro. **Rebuild the development APK after this update**: SecureStore and Notifications add native modules. Expo Go does not support the complete app. No emulator or local Android SDK is required for EAS builds.
+Install the development APK on a physical Android phone with an MWA-compatible wallet. **Rebuild the APK for this update:** native dependencies now include ElevenLabs/LiveKit WebRTC as well as LinearGradient, SecureStore and Notifications. Expo Go cannot run voice or the complete wallet flow. `build:preview` produces a standalone APK after EAS setup. No APK, physical-device test or store submission is claimed. `com.argus.vault` remains the provisional application ID.
 
-After EAS project linking, `npm.cmd run build:preview` builds a standalone APK. No cloud build, Android signing, or publisher registration has been performed. `com.argus.vault` is the provisional application ID; Victor must confirm it before release.
+## Live devnet vaults
 
-## Mock and live Sentinel
+Program **`4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`**, deployment slot **526836877**. The public-RPC dump matches HANDOFF SHA-256 **`831417e4dcbfd59cf82753479bf22101fca1614a41953d6fb3e8992662da72f9`**. Probe details: `../docs/audits/codex-devnet-2026-11-27.md`.
 
-By default, the app uses the in-process contract mock in `src/sentinel/mock.ts`. Every screen displays a **LOCAL MOCK** banner. Sample contacts, alerts and watch-log events reset when the app process restarts. No phone number or registration is sent to a server. Only the masked phone number remains in mock contact state after submission.
+The default experience connects directly to devnet without Sentinel:
 
-- **Explore the demo** needs no wallet. Its preview token is memory-only. Cancel, freeze and guardian votes are explicitly local simulations.
-- **Connect wallet and sign in** uses real MWA authorization and `signMessages`, even with the mock service. The mock verifies the Ed25519 signature before issuing its local token. Any correctly signed wallet receives a sample owner role; this is not an on-chain membership claim.
-- Signed-in Sentinel tokens are encrypted in SecureStore with wallet, backend scope and expiry. MWA authorization tokens stay in memory. Restoring a saved token revalidates it against the service. A fresh mock process does not retain server sessions and rejects its previous token, requiring sign-in again.
+- Discover/open a vault or create one for an existing classic SPL mint. Configure guardians/threshold, safe wallet, optional AI, delay and allowance. Creation pays devnet rent; it does not create a mint or acquire tokens.
+- Read balances, allowances, pending requests, trusted wallets and proposals from the chain. Deposit an explicit amount from the connected wallet’s associated account.
+- Send using the daily allowance, an active trusted wallet or a delayed request. Recipient ATAs are created idempotently in the same transaction. Delayed requests need a separate execution after the countdown.
+- Cancel, freeze, execute matured requests, approve/veto/apply proposals and close dead proposals. Guardians can sweep to the preset safe wallet and freeze.
+- Propose unfreezing, adding/removing trust or owner rotation. Existing proposals for all nine governance actions can be reviewed and executed.
 
-When the real HTTPS endpoint is announced, set this in an ignored `mobile/.env` and restart Metro/rebuild the standalone app:
+On-chain state determines UI roles; the program remains the authority. Actions refetch their relevant accounts, simulate, open MWA, verify the returned message/signatures, broadcast with preflight and show confirmation/error plus Explorer link. All errors 6000–6033 are mapped. Failed simulations stop before the wallet prompt. Sentinel never signs app transactions.
+
+The signature/blockhash is saved in SecureStore **before broadcast**. Uncertain results block another send until status is checked, including after restart. No automatic resubmission occurs. Wallet account changes and non-devnet RPCs are rejected. Foreground/manual refresh updates vault state. Refetch counters after a competing request/proposal creation.
+
+Default RPC: `https://api.devnet.solana.com`. For a client-specific HTTPS devnet RPC, set ignored `mobile/.env`:
 
 ```dotenv
-EXPO_PUBLIC_SENTINEL_URL=https://the-announced-sentinel-host
+EXPO_PUBLIC_SOLANA_RPC_URL=https://your-devnet-rpc.example
 ```
 
-Setting this variable selects HTTP mode and removes the wallet-free demo entry. Live errors never fall back to fixtures. Tokens are scoped to the backend, so mock tokens are not sent to a live service. API errors remain visible; expired or revoked sessions clear SecureStore and return to sign-in. Background polling pauses, then refreshes when the app becomes active.
+This value is public in the bundle. Never use a server/guardian secret. The client checks devnet genesis `EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG`; network requests time out. Public RPC can rate-limit discovery/refresh. Live reads never fall back to sample balances.
 
-## Wallet sign-in and contacts
+**Test tokens only.** The program is upgradeable by the hackathon dev wallet. Settle upgrade-authority policy before real funds.
 
-The client fetches the challenge, checks its domain, wallet, nonce, network and expiry, and asks MWA to sign the **exact UTF-8 message bytes**. It checks the signed payload and connected signer, extracts the appended 64-byte signature, base58-encodes it, and posts `/v1/auth/verify`. No transaction is built for sign-in. The implementation uses the contract-supported `signMessages` route, without reconstructing a message through `signIn`.
+## IDL
 
-Settings implements:
+`src/idl/argus.{json,ts}` exactly match `../app/src/idl/` (Windows cannot traverse the WSL target link): 14 instructions and four account types. Anchor 1.2.2 codes all layouts/discriminators/instruction data/account metas. PDA prefixes come from IDL metadata; ATAs use the SPL SDK. Decoders check owner, discriminator, canonical PDA, bump and parent/wallet binding. Inputs are bigint; decoded u64/i64 stay Anchor BN.
 
-- Add an E.164 phone number and label. `verified: true, verification: "none"` activates it immediately. There is **no SMS code step**. The field clears on success; contact responses show masked numbers.
-- List phone and push contacts. Adding preserves existing contacts. Phone removal is shown only to guardians; the service still enforces permissions on every request.
-- Register an Android Expo push token. Mock mode registers a clearly labeled sample device without contacting Expo.
-- Store the one-time `device_secret` in SecureStore, scoped to backend, wallet and vault. Idempotent registration preserves the stored secret when the server does not reveal it again. Push-token rotation removes the previous own-device contact before replacing its secret.
-- Remove this device with `X-Device-Secret`, including after bearer expiry. Guardians can remove other devices. Sign-out removes locally registered devices before revoking the token; cleanup failures remain retryable instead of reporting a successful sign-out.
+The TrustedAddress gap is fixed. Non-default SetAiGuardian execution supplies the new key’s trusted PDA; AI removal omits it. A sub-threshold proposal expires after seven days; passed proposals never expire. Dead-proposal closure refunds the stored payer. Anchor’s Node-only filesystem import is routed to a throwing native stub; no local keypair signing is used.
 
-The server owns membership and contact rules. A client-side role label is never authorization to sign a program action.
+## Sentinel, sample mode and push
 
-## Alerts and push
+### Local live theft demo
 
-The Alerts tab loads all alerts, can filter to open alerts, and paginates with `next_before` unix-second cursors. Detail screens fetch `/v1/alerts/{id}`, display every alert status, show call state/transcripts and resolution transaction links, and refresh while active. Amounts remain base-unit strings and are formatted without JS floating-point conversion. The Alert `token: { mint, symbol, decimals }` metadata supplies the unit: `12000000000` at six decimals displays as **12,000 USDC**. Null or blank symbols display **tokens** instead. Detail screens also show the full token mint. Both list and detail share the same formatter, which preserves fractional base units and large integers exactly.
+The local Sentinel v0 runs on port 8787. It currently implements health and demo endpoints; the regular authenticated wallet/contact/alert API is still separate and pending. Do not point `EXPO_PUBLIC_SENTINEL_URL` at v0 and expect phone/contact endpoints to work.
 
-Signal icons use only the stable `signals[].id` values: `new_address`, `lookalike`, `share_of_vault`, `odd_hour`, `scam_report`, and `first_destination`. Text labels do not control icons.
+Use **Try the live theft demo** for a real devnet session. The mobile client checks health/program/AI identity, receives a disposable demo owner, keeps its seed only in memory and submits only a signature for a verified Argus move. It checks the instruction kind, session accounts and test-token amount before signing. It never uses the connected MWA wallet for this demo and never receives the AI guardian signing key. The live SSE log shows risk, incoming/decision events and confirmed transactions. The demo owner can choose Cancel or confirm the request was theirs; confirmation preserves the original delay. On no answer, Sentinel protects the high-risk session automatically.
 
-“It was me, let it through” calls `/dismiss`. It stops further calls and changes the displayed status; the withdrawal, unlock time and ability to cancel remain unchanged. A phone-call `cancel_requested` outcome is not displayed as an on-chain cancellation.
+Set a phone-reachable URL separately:
 
-The app creates Android channel **`argus-alerts`** at **MAX** importance. It handles foreground/background notification taps, the last response on cold start, and **`argus://alert/<id>`** through both initial URLs and runtime links. Signed-out users sign in before the saved alert route resumes. Only the validated alert ID is used from a notification; the detail and vault are fetched under wallet authentication. No push payload can initiate a signature or supply trusted transaction accounts.
+```dotenv
+EXPO_PUBLIC_SENTINEL_DEMO_URL=https://your-sentinel-tunnel.example
+```
 
-Settings includes **Test a local alert notification** in mock mode. This requests Android notification permission and schedules a local notification for `al_9`, allowing tap routing to be exercised without EAS push credentials.
+In development, the app infers Metro's host on port 8787 if this is unset. Private-host HTTP is allowed only in development. For USB, use `adb reverse tcp:8787 tcp:8787` with `http://127.0.0.1:8787`; WSL/LAN setups may need host forwarding. Production/standalone builds require HTTPS. The health response must match the announced devnet program and AI public address. Vault creation prefills the announced AI public address and dUSDC mint; clear the AI field to disable it.
 
-For real remote delivery, Victor must link the EAS project, configure Android FCM v1 credentials in EAS, and supply Firebase's `google-services.json`. Set **`GOOGLE_SERVICES_JSON`** to an ignored local file path or an EAS file environment variable; `app.config.ts` passes it to Expo. Rebuild the APK. The EAS project ID is read from Expo Constants. Push registration reports missing project setup, permission denial and network failures. No service keys belong in `EXPO_PUBLIC_*` or source files.
+### In-app Argus calls
 
-## Program client and deployment
+Twilio is dropped. Calls use the internet, without a phone number or SIM. An `incoming` demo event opens a full-screen **Argus · Vault guardian** screen with Accept and Decline. Decline sends Cancel. Accept requests microphone access, then lazily loads `@elevenlabs/react-native` and starts a WebRTC conversation with public agent `agent_3001m8ebdd1ee1yrp9ga4kcn2436`. The five dynamic variables come from the current session: `owner_name`, `vault_name`, `amount`, `destination`, `reason`. No ElevenLabs API key is shipped.
 
-Program ID: **`4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`**. It is **not deployed**. The feature-complete generated JSON and TS helper are copied from `../app/src/idl/` into `src/idl/`.
+The native integration uses `ConversationProvider` / `useConversation`. Compatible versions are locked: SDK 1.3.0, LiveKit React Native 2.12.0, WebRTC 144.1.2, Expo plugin 1.1.0. Both Expo plugins and Android microphone permission are configured; the camera permission is blocked. Microphone permission is requested only after Accept. The SDK module stays unloaded while ringing, so a missing native module can fall back to buttons.
 
-`src/program/client.ts` provides IDL-based Vault, Withdrawal, Proposal and TrustedAddress decoders/fetchers, PDA derivation and all 13 instruction builders. It uses Anchor 1.2.2's `@anchor-lang/core` client and classic SPL Token. Numeric inputs are `bigint`; decoded 64-bit fields are Anchor `BN`, never JS numbers. Decoders check the Argus owner, discriminator, PDA, bump and optional parent-vault binding. `withdrawTrusted` reads the destination's SPL authority to select the correct trusted PDA. `executeProposal` supplies the optional trusted account for owner rotation and non-default AI changes as well as add/remove trusted.
+The `cancel_withdrawal` and `allow_withdrawal` tools post to this demo session's `/decision` with `via: voice`; the existing decision buttons use `via: button`. Tool arguments cannot substitute the session or destination. A shared decision gate serializes answers, deduplicates repeated tools/buttons and rejects contradictory or expired decisions. HTTP acceptance is shown as a received request, with on-chain confirmation left to the live log. Allow preserves the original delay. Caption/status relay to `/call` is optional and cannot block a decision: at most 80 posts with lines capped at 400 characters. Captions remain display-only.
 
-Construct `new ArgusClient(connection)`, fetch the selected vault/withdrawal/proposal, then call a builder to obtain a `TransactionInstruction`. Builders do not sign or send. Request/proposal builders use the fetched next counter; refetch before retrying after a competing creation. The initial TrustedAddress IDL gap was corrected upstream during integration; the client uses the corrected generated schema.
+Mute, connection timeout, permission denial, disconnect and Back all retain the decision-button path. Ending the call, leaving the app, receiving Sentinel's decision or reaching the deadline tears down voice; the SDK provider and the connection owner also handle late connection cleanup. Call transcripts stay in memory and are relayed to the laptop only for the current demo session.
 
-After Claude announces the devnet deployment in `../docs/HANDOFF.md`, verify the deployed address, wire verified live accounts and MWA signing with pending/confirmed/error states and Explorer links. **Cancel and freeze stay MWA → program. No Sentinel endpoint signs for the app.** Outside the explicit preview, program action buttons remain disabled.
+For **normal production push alerts**, a foreground notification opens the alert; a background/cold notification opens it on tap. After authenticated detail and owner-role checks, an open high/critical withdrawal opens the same incoming-call screen. Amounts, destinations and actions never come from push data. The existing v1 contract has no production voice-decision route: **Cancel still opens MWA and must confirm on-chain; Allow calls the authenticated dismiss endpoint and keeps the withdrawal delay.** Demo `/decision` is never used for ordinary vaults. Guardian/sample/resolved alerts do not auto-ring. Delivery needs the hosted authenticated Sentinel API plus EAS/FCM; there is no OS lock-screen call service or background microphone recording.
 
-Program audit/test targets are Rust + LiteSVM in `programs/argus/tests/`. No program, Sentinel service, web app, or program-test files were changed by this mobile work.
+`npm.cmd run smoke:sentinel -- http://127.0.0.1:8787` creates a throwaway live devnet session and checks seven outcomes through the same client: blocked drain/trusted moves, allowed daily spending, delayed request, AI cancellation/freeze and rejection after freeze. It prints public session/transaction IDs and results only; no key is written to disk. This smoke uses real devnet test-token transactions and the server's demo funding.
 
-### Cancel and Freeze account contract
+Explore the sample vault opens explicitly simulated balances and actions. The alerts/contact client defaults to an in-process contract mock while Sentinel is offline; its sample banner applies to those screens, not live devnet vaults.
 
-Both instructions take no arguments. Their transactions will be generated from the final IDL and signed by the connected wallet through MWA. These notes record the reviewed contract; live buttons remain disabled until the deployment/IDL announcement.
+Set `EXPO_PUBLIC_SENTINEL_URL` only to the announced HTTPS service. HTTP failures never fall back to fixtures. Sign-in validates the challenge and signs its exact UTF-8 bytes with MWA signMessages; scoped bearer tokens and device secrets use SecureStore. MWA authorization stays in memory. Logout revokes the session and removes this device; cleanup failures remain retryable.
 
-| Instruction | Account | Source | Signer | Writable |
-|---|---|---|---|---|
-| `cancel_withdrawal` | `canceller` | Connected MWA wallet | Yes | No |
-| `cancel_withdrawal` | `vault` | Verified selected Vault account | No | No |
-| `cancel_withdrawal` | `withdrawal` | Verified Withdrawal belonging to that vault | No | Yes |
-| `cancel_withdrawal` | `rent_payer` | Original rent payer decoded from that Withdrawal | No | Yes |
-| `freeze` | `signer` | Connected MWA wallet | Yes | No |
-| `freeze` | `vault` | Verified selected Vault account | No | Yes |
+Settings now focuses on push devices and explains internet calls; it does not ask for a phone number. The legacy v1 phone-contact client methods remain for contract compatibility. Device registration retains the one-time secret on repeats and handles token rotation/removal. Alerts use signals[].id, exact token metadata, pagination, call status/transcripts and resolution links. Dismissal stops calls without cancelling or shortening the request.
 
-Cancellation refunds the original rent payer, including after owner rotation; the wallet submitting the cancellation is not automatically that recipient. It remains allowed while frozen and after the delay ends, provided the Withdrawal account still exists and the signer currently has an allowed protective role. Confirm account existence/ownership and refresh current vault roles before signing; a raced execution/cancellation can remove the account. Freeze is idempotent, works independently of token balance and transfers, and always sets the frozen flag. Success messages require confirmed chain results and transaction Explorer links; Sentinel dismissal remains a separate API action.
+Live HTTP alerts enable direct MWA Cancel/Freeze. The chain withdrawal’s vault/id/amount/destination are checked against the alert before signing. Mock alerts outside the preview do not enable live transactions.
 
-Sentinel's bearer token does not authorize these instructions. The app uses the user's MWA signature; the server's AI key is never part of the mobile transaction flow.
+The `argus-alerts` MAX-importance Android channel and `argus://alert/<id>` route remain. Taps fetch authenticated detail; payload amounts/destinations/transactions are never trusted. Incoming alerts wait during unresolved wallet transactions.
 
-## Transaction error messages
+Victor must link EAS, configure FCM v1 and supply ignored `google-services.json`. `GOOGLE_SERVICES_JSON` accepts a local/EAS file-variable path. Local notifications do not require remote FCM, but need a fresh native APK. No service secret belongs in EXPO_PUBLIC variables.
 
-`src/program/errors.ts` maps every append-only Argus code **6000–6031** to its exact Rust variant name and a short user message, including `InvalidAmount` (6027), `InvalidDestination` (6028), and the subsequently appended trusted-governance errors (6029–6031). `argusErrorForCode(code)` is for codes already identified as Argus errors. `transactionErrorMessage(error, instructionPrograms)` handles Anchor error objects, RPC confirmation/preflight results, and web3.js logs. Pass the submitted transaction's ordered program-ID list when an RPC error only identifies an instruction index. The formatter avoids attributing a foreign program/CPI custom code or a JSON-RPC code to Argus. Unknown/future codes use a message asking the user to check transaction status before retrying. Anchor duplicate-mutable error 2040 remains a framework error; it is not relabeled as Argus 6028.
-
-The mapping test reads `../programs/argus/src/error.rs` directly and checks all names and numeric positions. Appending/reordering an error without updating the mobile mapping fails that test. This does not consume the starter IDL. Connect the formatter to the transaction UI when Day 1 signing is implemented; the current app has no live transaction path.
-
-## Device build readiness
-
-The development build command is ready: **`npm.cmd run build:development`**. EAS project linking and Android FCM configuration are still pending Victor's setup. At the latest check there was no configured EAS project ID or Firebase file in this app, and no `adb` executable was available. No APK build or physical-device result is claimed. Once Victor supplies the setup and a reachable phone, build the development APK and run the MWA and local-notification steps below. Local notifications themselves do not need remote FCM delivery, but the new native modules require a fresh APK.
-
-## Validation
+## Validation and physical smoke test
 
 ```powershell
 npm.cmd run typecheck
 npm.cmd test
 npm.cmd run check:expo
 npm.cmd run export:android
-npm.cmd run check:program-bundle
 ```
 
-Validated on 2026-11-26: 33 behavior tests, TypeScript, Expo dependency compatibility, Android export and a separate Metro bundle containing the program SDK pass. All 32 Rust error names/codes are mapped. Client tests cover generated-file parity, account ownership/discriminator/PDA/bump/parent checks, u64/i64 bounds, all 13 instruction builders, destination token authority and governance optional accounts. Existing tests cover signed-message bytes and signer, nonce expiry/replay, token persistence/restoration/revocation, backend scoping, stale responses, contact permissions/masking, device-secret idempotence/rotation, logout retry, dismissal, cursors, deep links, token metadata and transaction-error provenance.
+Tests cover IDL parity/decoding, all 14 builders, exact amounts, allowance reset/limit boundaries, per-request wait progress, optional RPC history failure, devnet guard, changed/unsigned/refused wallet payloads, pre-sign simulation failure, confirmation and recovery without resending, plus Sentinel auth/contact/alert behavior. Call tests cover authenticated owner eligibility, voice context, decision races/deduplication/expiry, retryable delivery, late connection teardown, microphone controls and exact decision/caption requests. Android export checks JavaScript/assets, not native wallet or live microphone compatibility.
 
-Anchor 1.2.2's browser entry references `fs` inside its Node-only local-wallet helper. `metro.config.cjs` routes only Anchor's filesystem import to a throwing native stub. The client supplies a wallet-free provider; MWA remains responsible for signing.
+Validated on 2026-11-27: **59/59 tests**, TypeScript, Expo dependency compatibility, Android export and Expo native-config introspection pass. The introspected manifest has microphone permission, communication audio routing, screen-sharing disabled and camera removed. The earlier separate local-service live demo smoke passed **7/7**. Public-RPC genesis verification also passes. EAS/FCM are not configured and adb is unavailable in this workspace; physical-device results remain pending. Probe build artifacts live under ignored `mobile/.program-check/audits/`; `docs/audits/` contains readable source/results/manifests only.
 
-The Android bundle is a JavaScript/native-configuration check; **no APK/native compilation, physical-device wallet test, or remote push delivery test has been run**. Metro's existing package-export fallback warnings for `rpc-websockets` and `@noble/hashes/crypto.js` remain. The last dependency audit reported eight moderate upstream Expo/Solana advisories; no incompatible overrides or SDK downgrade were applied.
+After EAS setup, check the intro/hero, fonts, large text, keyboard, Back and reduced motion. Connect/open/create a test-token vault; reject a wallet request and switch accounts. Deposit a small amount, request/cancel/freeze, then approve/apply Unfreeze with a guardian. Test instant/trusted sends, matured execution and cleanup/refunds. Interrupt connectivity after signing and recover the saved signature after restart. Separately test sample contact registration, local notification taps and cold deep links; test remote delivery/live-alert actions once Sentinel/FCM are ready.
 
-Physical-device smoke test:
+For voice, use a rebuilt development APK and the hosted/tunnel Sentinel demo URL. Start the live demo, request the remaining balance, Accept, and say cancel; verify the transcript/decision on the laptop and the actual cancel/freeze transactions. On a fresh session confirm the request was yours and verify its delay remains. Also test Decline, denied microphone, muted microphone, no network, connection timeout, Back, Home/background, server timeout while connecting, repeated tool calls and a fresh incoming call after teardown. For production push, test foreground receipt and background/cold taps after sign-in, guardian/resolved-alert exclusion, MWA rejection/unknown confirmation and late alert arrival while another wallet request is pending. These are pending physical-phone checks, not claimed results.
 
-1. Explore the demo; open Alerts and review the critical request. Dismiss it and check that its countdown and Pending request remain. Cancel it separately and check the cancelled state.
-2. Reset, freeze the sample vault, check Send is disabled and a freeze alert appears, then cancel a pending withdrawal. Check guardian approval/veto still preserves its delay.
-3. In Settings add a phone, confirm no SMS screen appears and the listed number is masked. Add another and verify the first remains. The sample owner cannot remove phone contacts.
-4. Register a sample push device twice; there should be one contact. Remove it, re-register, then sign out and verify the device is removed.
-5. Schedule the local alert notification. Tap it while the app is foregrounded/backgrounded. Also launch `argus://alert/al_9` with the app closed; verify sign-in gates the detail and Back returns to the list.
-6. Reject and retry wallet authorization and message signing. Test a wallet-account change, expired session, offline server and API 403/429. Reopening with a live token should restore it securely; failed live calls must not show sample data.
-7. With real FCM/EAS setup and live Sentinel, register the phone, send the contract push, test killed-app tap handling, then remove the device. Check large text, keyboard scrolling and Android Back.
+The dependency graph reports **17 upstream advisories: 5 high, 12 moderate**, including the WebRTC config plugin's Expo tooling path. High paths include bigint-buffer’s [native conversion advisory](https://github.com/advisories/GHSA-3gc7-fjrx-p6mg) and toml [parser advisories](https://github.com/advisories/GHSA-v5mp-jgw5-2x6j). The bigint package declares a JS browser replacement; mobile does not open Anchor workspaces/TOML. This is not a blanket reachability proof or a clean dependency graph. No incompatible audit-force downgrades were applied. Recheck before release. Metro also reports package-export fallbacks for rpc-websockets and noble hashes.
 
-References: [Sentinel contract](../docs/SENTINEL-API.md), [MWA signing specification](https://solana-mobile.github.io/mobile-wallet-adapter/spec/spec.html), [Expo notifications](https://docs.expo.dev/versions/latest/sdk/notifications/), [SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/), [APK build profiles](https://docs.expo.dev/build-reference/apk/).
+References: [Sentinel contract](../docs/SENTINEL-API.md), [ElevenLabs React Native SDK](https://elevenlabs.io/docs/eleven-agents/libraries/react-native), [Expo/WebRTC setup](https://elevenlabs.io/docs/eleven-agents/guides/integrations/expo-react-native), [MWA specification](https://solana-mobile.github.io/mobile-wallet-adapter/spec/spec.html), [Expo notifications](https://docs.expo.dev/versions/latest/sdk/notifications/), [SecureStore](https://docs.expo.dev/versions/latest/sdk/securestore/).

@@ -52,6 +52,12 @@ export function listenForAlerts(onAlert: (id: string) => void, onError: (message
     void Notifications.clearLastNotificationResponseAsync().catch(() => {});
   };
   const notificationSubscription = Notifications.addNotificationResponseReceivedListener(response);
+  // While foregrounded, an authenticated alert fetch can open the incoming-call screen immediately.
+  const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+    if (!active || notification.request.content.data?.type !== 'withdrawal_alert' || seen.has(notification.request.identifier)) return;
+    const id = alertIdFromPush(notification.request.content.data);
+    if (id) { seen.add(notification.request.identifier); onAlert(id); }
+  });
   const linkSubscription = Linking.addEventListener('url', event => {
     const id = alertIdFromUrl(event.url); if (active && id) onAlert(id);
   });
@@ -59,5 +65,5 @@ export function listenForAlerts(onAlert: (id: string) => void, onError: (message
   void Linking.getInitialURL().then(url => { const id = alertIdFromUrl(url); if (active && id) onAlert(id); })
     .catch(() => { if (active) onError('Could not open the alert link. Open Alerts to retry.'); });
   void createAlertChannel().catch(() => { if (active) onError('Could not create the alert notification channel.'); });
-  return () => { active = false; notificationSubscription.remove(); linkSubscription.remove(); };
+  return () => { active = false; notificationSubscription.remove(); receivedSubscription.remove(); linkSubscription.remove(); };
 }

@@ -9,7 +9,6 @@ import { colors as c } from '../theme';
 export function Settings({ vault, preview, onSignOut, onExit, onReset }: {
   vault: string; preview: boolean; onSignOut: () => Promise<void>; onExit: () => void; onReset: () => void;
 }) {
-  const [phone, setPhone] = useState('');
   const [label, setLabel] = useState('My Android phone');
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
@@ -33,39 +32,19 @@ export function Settings({ vault, preview, onSignOut, onExit, onReset }: {
     ]);
   return <View style={common.stack}>
     <Label>SETTINGS</Label><Copy style={common.title}>Stay within reach.</Copy>
-    <Copy style={common.muted}>{sentinel.mock ? 'Local mock: registrations stay on this device for this app session. No phone call or remote push is sent.'
-      : 'Alerts go to every active phone and push device. Adding a contact also notifies existing contacts.'}</Copy>
+    <Copy style={common.muted}>Argus calls over the internet. No phone number or SIM is needed. Microphone access is requested when you accept a call.</Copy>
+    <Copy style={common.muted}>{sentinel.mock ? 'Local mock: registrations stay on this device for this app session. Use the live devnet demo to try a voice call.'
+      : 'Register this device for push alerts. Adding a device also notifies existing contacts.'}</Copy>
     {resource.error && <Copy accessibilityRole="alert">{resource.error}</Copy>}
-    <Panel>
-      <Label>ADD A PHONE CONTACT</Label>
-      <Field label="Contact label" value={label} onChangeText={setLabel} maxLength={80} editable={!busy} />
-      <Field label="Phone number (international format)" placeholder="+2348012345621" keyboardType="phone-pad"
-        autoComplete="tel" value={phone} onChangeText={setPhone} editable={!busy} />
-      <Button title="Add phone contact" disabled={busy || !label.trim() || !phone.trim()} onPress={() => { void perform(async () => {
-        const result = await sentinel.addPhone(vault, phone, label);
-        setPhone('');
-        return result.verification === 'none' && result.verified ? 'Phone contact is active. No SMS code is required.' : 'Contact added. The server requires additional verification.';
-      }); }} />
-      <Copy style={{ color: c.muted, fontSize: 12, lineHeight: 19 }}>Check the number carefully: v1 does not verify it by SMS. Adding a number does not replace an existing contact.</Copy>
-    </Panel>
-    <Panel><Label>ACTIVE PHONE CONTACTS</Label>
-      {resource.data?.contacts.phones.length === 0 && <Copy style={common.muted}>No phone contacts registered.</Copy>}
-      {resource.data?.contacts.phones.map(contact => <View key={contact.id} style={{ gap: 8 }}>
-        <Copy>{contact.label}</Copy><Copy style={common.mono}>{contact.e164}</Copy>
-        {guardian && <Button title="Remove phone contact" disabled={busy} onPress={() => confirmRemoval('Remove this phone contact?', async () => {
-          await sentinel.removePhone(vault, contact.id); return 'Phone contact removed.';
-        })} />}
-      </View>)}
-      <Copy style={common.muted}>Only guardians can remove phone contacts. The owner can add contacts.</Copy>
-    </Panel>
     <Panel><Label>PUSH ALERTS</Label>
+      <Field label="Device label" value={label} onChangeText={setLabel} maxLength={80} editable={!busy} />
       <Copy style={common.muted}>{sentinel.mock ? 'Register a sample push device to preview the contact flow.' : 'Register this Android phone for Sentinel notifications.'}</Copy>
       <Button title={sentinel.mock ? 'Register sample push device' : 'Register this phone for push alerts'} disabled={busy || !label.trim()} onPress={() => { void perform(async () => {
         const token = sentinel.mock ? 'ExponentPushToken[local-preview-only]' : await getExpoPushToken();
         await sentinel.addDevice(vault, token, label); return sentinel.mock ? 'Sample push device registered. Removal secret stored securely.' : 'Push alerts registered for this phone.';
       }); }} />
       {resource.data?.contacts.devices.map(device => <View key={device.id} style={{ gap: 8 }}>
-        <Copy>{device.label}</Copy><Copy style={common.mono}>{device.id} · {device.platform}</Copy>
+        <Copy>{device.label}</Copy><Copy>{device.id} · {device.platform}</Copy>
         {(guardian || resource.data?.device?.id === device.id) && <Button title="Remove push device" disabled={busy}
           onPress={() => confirmRemoval('Remove this push device?', async () => {
             if (resource.data?.device?.id === device.id) await sentinel.removeOwnDevice(vault);

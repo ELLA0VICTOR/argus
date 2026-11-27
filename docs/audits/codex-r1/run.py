@@ -14,7 +14,7 @@ log = []
 failed = False
 def run(args, **kwargs):
     global failed
-    result = subprocess.run(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kwargs)
+    result = subprocess.run(args, cwd=scratch, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **kwargs)
     log.append('$ ' + ' '.join(map(str, args)) + '\n' + result.stdout)
     output.write_text('\n'.join(log))
     print(result.stdout[-1800:], flush=True)

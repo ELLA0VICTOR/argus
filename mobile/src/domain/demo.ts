@@ -2,6 +2,7 @@ export type Withdrawal = {
   id: string;
   amount: string;
   destination: string;
+  requestedAt: number;
   unlocksAt: number;
   flagged: boolean;
   reasons: string[];
@@ -37,13 +38,13 @@ export function createDemo(now: number): DemoState {
     withdrawals: [
       {
         id: 'WD-0042', amount: '680.00', destination: '9WzD…AwfM',
-        unlocksAt: now + 85_267_000, flagged: true,
+        requestedAt: now - 1_133_000, unlocksAt: now + 85_267_000, flagged: true,
         reasons: ['Address created 3 minutes ago', 'Named in 2 public drainer reports'],
         status: 'pending',
       },
       {
         id: 'WD-0041', amount: '125.00', destination: '7tRb…Kp2n',
-        unlocksAt: now + 7_320_000, flagged: false,
+        requestedAt: now - 79_080_000, unlocksAt: now + 7_320_000, flagged: false,
         reasons: ['Outside the daily instant allowance'], status: 'pending',
       },
     ],

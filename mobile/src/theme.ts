@@ -1,5 +1,5 @@
 export const colors = {
-  ink: '#ffffff', panel: '#f4f6fa', raised: '#eef2f8',
+  ink: '#ffffff', canvas: '#f7f8fb', panel: '#f4f6fa', raised: '#eef2f8',
   line: '#e4e8ef', lineSoft: '#eef1f6', lineStrong: '#cfd6e2',
   fg: '#16191f', muted: '#5f6877', faint: '#8b94a3',
   brand: '#2563eb', brand2: '#3b82f6', brandSoft: '#eaf1ff',

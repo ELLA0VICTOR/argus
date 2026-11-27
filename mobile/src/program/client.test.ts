@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { BorshInstructionCoder } from '@anchor-lang/core';
 import { Connection, PublicKey, SystemProgram, type AccountInfo, type TransactionInstruction } from '@solana/web3.js';
-import { AccountLayout, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { AccountLayout, MintLayout, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Buffer } from 'buffer';
 import { ArgusClient, ARGUS_PROGRAM_ID, integer,
   type GovAction, type Proposal, type RecordAt, type Vault, type Withdrawal } from './client.ts';
+import { readVault } from './read.ts';
+import { DEVNET_GENESIS } from './transactions.ts';
 
 const pk = (byte: number) => new PublicKey(Buffer.alloc(32, byte));
 const client = new ArgusClient(new Connection('http://localhost:8899'));
@@ -117,6 +119,7 @@ test('offline builders use the IDL account order, flags and instruction data', a
   assert(instructions[4].keys[3].pubkey.equals(creator)); // stored rent payer, not cranker
   assert(instructions[5].keys[3].pubkey.equals(creator));
   assert(instructions[11].keys[4].pubkey.equals(ARGUS_PROGRAM_ID)); // Anchor optional-account sentinel
+  assert(instructions[12].keys[3].pubkey.equals(p.data.rentPayer)); // cleanup refunds the stored payer
   assert.equal((verifyInstruction(instructions[0], names[0]).dailyLimit as { toString(): string }).toString(), '18446744073709551615');
 });
 
@@ -160,4 +163,32 @@ test('numeric limits reject lossy or invalid amounts and preserve signed i64', (
   assert.throws(() => client.deposit(vault, pk(3), pk(9), 0n), /greater than zero/);
   assert.throws(() => client.withdrawInstant(vault, pk(3), pk(9), -1n), /u64/);
   assert.throws(() => client.executeWithdrawal(vault, pk(20), { ...withdrawal(), data: { ...withdrawal().data, vault: pk(99) } }), /withdrawal vault/);
+});
+
+test('recent activity keeps RPC history distinct from empty history and does not block vault reads on failure', async t => {
+  const connection = new Connection('http://localhost:8899');
+  const local = new ArgusClient(connection);
+  const vaultAccount = await account('vault', vault.data);
+  const request = withdrawal(); const requestAccount = await account('withdrawal', request.data);
+  const mintData = Buffer.alloc(MintLayout.span);
+  MintLayout.encode({ mintAuthorityOption: 0, mintAuthority: PublicKey.default, supply: 1_000_000n,
+    decimals: 6, isInitialized: true, freezeAuthorityOption: 0, freezeAuthority: PublicKey.default }, mintData);
+  connection.getGenesisHash = async () => DEVNET_GENESIS;
+  connection.getAccountInfo = async address => address.equals(vault.address) ? vaultAccount
+    : { data: mintData, owner: TOKEN_PROGRAM_ID, executable: false, lamports: 1, rentEpoch: 0 };
+  connection.getTokenAccountBalance = async () => ({ context: { slot: 1 }, value: { amount: '123456789', decimals: 6, uiAmount: 123.456789 } });
+  t.mock.method(connection, 'getProgramAccounts', async () => [{ pubkey: request.address, account: requestAccount }]);
+  const history = [{ signature: 'observed-signature', slot: 123, err: null, memo: null, blockTime: null, confirmationStatus: 'confirmed' as const }];
+  connection.getSignaturesForAddress = async (address, options, commitment) => {
+    assert(address.equals(vault.address)); assert.equal(options?.limit, 10); assert.equal(commitment, 'confirmed');
+    return history;
+  };
+  assert.deepEqual((await readVault(local, vault.address)).history, history);
+  connection.getSignaturesForAddress = async () => [];
+  assert.deepEqual((await readVault(local, vault.address)).history, []);
+  connection.getSignaturesForAddress = async () => { throw new Error('History is unavailable'); };
+  const result = await readVault(local, vault.address);
+  assert.equal(result.history, null); assert.equal(result.balance, '123456789'); assert.equal(result.decimals, 6);
+  assert.equal(result.withdrawals[0].data.requestedAt.toString(), request.data.requestedAt.toString());
+  assert.equal(result.vault.address.toBase58(), vault.address.toBase58());
 });

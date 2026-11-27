@@ -6,24 +6,31 @@ import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAd
 import { Button, Copy, Field, Label, Logo, Panel, Status, common } from '../components/ui';
 import { DawnHero } from '../components/DawnHero';
 import { TransactionNotice } from '../components/TransactionNotice';
+import { ActivityTimeline, AllowanceMeter, KeyAvatar, RouteIndicator, WaitProgress } from '../components/VaultPatterns';
+import { allowanceFraction, allowanceRemaining, delayLabel } from '../domain/vaultMetrics';
 import { connectWallet, disconnectWallet, signWalletTransaction, type WalletSession } from '../services/wallet';
 import { programClient as client, connection } from '../program/runtime';
-import { readVault, type VaultView } from '../program/read';
+import { readVault, readWalletVaults, type VaultView } from '../program/read';
 import { integer, type GovAction, type RecordAt, type Proposal, type Withdrawal } from '../program/client';
 import { checkTransaction, parseAmount, runTransaction, transactionBusy, type TransactionState } from '../program/transactions';
 import { formatUnits } from '../sentinel/rules';
 import { countdown } from '../domain/demo';
 import { colors as c, fonts as f } from '../theme';
 import * as SecureStore from 'expo-secure-store';
+import { DEMO_MINT, SENTINEL_AI_GUARDIAN } from '../sentinel/demo';
 
 type Tab = 'Home' | 'Send' | 'Activity' | 'Guardians' | 'Settings';
 const tabs: Tab[] = ['Home', 'Send', 'Activity', 'Guardians', 'Settings'];
-const key = (value: string) => new PublicKey(value.trim());
+const key = (value: string) => {
+  try { return new PublicKey(value.trim()); }
+  catch { throw new Error('Enter a valid Solana wallet or account address.'); }
+};
 const numberId = (value: { toString(): string }) => BigInt(value.toString());
 
-export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; onSentinel: () => void; onBusy: (busy: boolean) => void }) {
+export function LiveApp({ onDemo, onLiveDemo, onSentinel, onBusy, demoAvailable }: { onDemo: () => void; onLiveDemo: () => void; onSentinel: () => void; onBusy: (busy: boolean) => void; demoAvailable: boolean }) {
   const [wallet, setWallet] = useState<WalletSession | null>(null);
   const [address, setAddress] = useState('');
+  const [vaultChoices, setVaultChoices] = useState<string[]>([]);
   const [view, setView] = useState<VaultView | null>(null);
   const [tab, setTab] = useState<Tab>('Home');
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +39,13 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
   const [now, setNow] = useState(Date.now());
   const [creating, setCreating] = useState(false);
   const [amount, setAmount] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
   const [destination, setDestination] = useState('');
   const [sendMode, setSendMode] = useState<'instant' | 'delayed' | 'trusted'>('delayed');
-  const [mint, setMint] = useState('');
+  const [mint, setMint] = useState(DEMO_MINT);
   const [guardians, setGuardians] = useState('');
   const [threshold, setThreshold] = useState('1');
-  const [ai, setAi] = useState('');
+  const [ai, setAi] = useState(SENTINEL_AI_GUARDIAN);
   const [safe, setSafe] = useState('');
   const [delay, setDelay] = useState('86400');
   const [limit, setLimit] = useState('100');
@@ -75,7 +83,11 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
   async function connect() {
     if (lock.current) return;
     lock.current = true; setLoading(true); setError(null);
-    try { setWallet(await connectWallet()); }
+    try {
+      const session = await connectWallet(); setWallet(session);
+      try { setVaultChoices((await readWalletVaults(client, key(session.address))).map(v => v.address.toBase58())); }
+      catch { setError('Wallet connected. Vault discovery could not reach devnet; paste a vault address below or retry later.'); }
+    }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not connect your Android wallet.'); }
     finally { lock.current = false; setLoading(false); }
   }
@@ -93,7 +105,8 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
       const result = await runTransaction(connection, key(wallet.address), instructions,
         transaction => signWalletTransaction(wallet, transaction), setTx,
         pending => SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(pending)));
-      await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(result));
+      await SecureStore.setItemAsync('argus:pending-devnet-transaction', JSON.stringify(result))
+        .catch(() => setError('Transaction status could not be saved. Keep its Explorer link; the on-chain result above still applies.'));
       if (result.phase === 'confirmed') await refresh();
     } catch (e) { setTx({ phase: 'failed', message: e instanceof Error ? e.message : 'Could not prepare this action. Refresh and retry.' }); }
     finally { lock.current = false; }
@@ -107,6 +120,7 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
   const owner = !!wallet && v?.data.owner.toBase58() === wallet.address;
   const protective = owner || guardianIndex >= 0 || (!!wallet && v?.data.aiGuardian.toBase58() === wallet.address);
   const units = (value: string) => `${formatUnits(value, view?.decimals ?? 0)} tokens`;
+  const remaining = v ? allowanceRemaining(numberId(v.data.dailyLimit), numberId(v.data.spentInWindow), numberId(v.data.windowStart), BigInt(Math.floor(now / 1000))) : 0n;
   function freeze() {
     if (!v) return;
     confirm('Pause outgoing transfers?', 'Any owner or guardian can freeze. Unfreezing needs guardian approval.', async signer => {
@@ -136,9 +150,12 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
     <DawnHero />
     {!wallet ? <><Copy style={common.muted}>A self-custodial vault on Solana. Large withdrawals wait; your guardians can stop them.</Copy>
       <Button title="Connect your wallet" busy={loading} busyTitle="Opening your wallet…" onPress={() => { void connect(); }} />
-      <Button title="Explore the sample vault" tone="secondary" disabled={busy} onPress={onDemo} /></>
+      <Button title="Try the live theft demo" tone="secondary" disabled={busy} onPress={onLiveDemo} />
+      {demoAvailable && <Button title="Explore the offline sample" tone="quiet" disabled={busy} onPress={onDemo} />}
+      <Button title="Open alerts and contact settings" tone="quiet" disabled={busy} onPress={onSentinel} /></>
       : <Panel><Label>Your connected wallet</Label><Copy selectable style={common.mono}>{wallet.address}</Copy>
-        {!creating ? <><Field label="Vault address" value={address} onChangeText={setAddress} autoCapitalize="none" autoCorrect={false} placeholder="Paste a vault account address" />
+        {!creating ? <>{vaultChoices.map(selected => <View key={selected} style={{ gap: 8 }}><Copy selectable style={common.mono}>{selected}</Copy><Button title="Open this vault" tone="secondary" disabled={busy} onPress={() => { current.current = selected; setAddress(selected); void refresh(selected); }} /></View>)}
+          <Field label="Vault address" value={address} onChangeText={setAddress} autoCapitalize="none" autoCorrect={false} placeholder="Paste a vault account address" />
           <Button title="Open vault" busy={loading} disabled={!address.trim()} onPress={() => { void open(); }} />
           <Button title="Create a new vault" tone="quiet" disabled={busy} onPress={() => setCreating(true)} /></>
           : <><Copy style={{ fontFamily: f.semibold, fontSize: 20 }}>Create your devnet vault</Copy>
@@ -147,17 +164,20 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
             <Field label="Approvals needed" value={threshold} onChangeText={setThreshold} keyboardType="number-pad" />
             <Field label="Safe wallet (separate from your owner wallet)" value={safe} onChangeText={setSafe} autoCapitalize="none" autoCorrect={false} />
             <Field label="AI guardian (optional)" value={ai} onChangeText={setAi} autoCapitalize="none" autoCorrect={false} />
+            <Copy style={common.muted}>The announced Sentinel public key is prefilled. Clear it to disable the AI guardian. Its signing key stays on the server.</Copy>
             <Field label="Withdrawal delay in seconds (60–2,592,000)" value={delay} onChangeText={setDelay} keyboardType="number-pad" />
             <Field label="Daily token allowance" value={limit} onChangeText={setLimit} keyboardType="decimal-pad" />
             <Copy style={common.muted}>Keep owner, guardian and safe keys separate. The wallet pays devnet rent and fees. The program is upgradeable by the hackathon dev wallet; use test tokens only.</Copy>
             <Button title="Review vault creation" disabled={busy} onPress={() => confirm('Create this vault?', 'Check every address. Guardians control changes to your vault’s rules.', async signer => {
               const token = await getMint(connection, key(mint), 'confirmed', TOKEN_PROGRAM_ID);
-              const set = guardians.split(',').map(g => key(g)); const t = Number(threshold); const d = BigInt(delay);
+              const set = guardians.split(',').map(g => key(g)); const t = Number(threshold);
+              if (!/^\d+$/.test(delay)) throw new Error('Enter the withdrawal delay in whole seconds.');
+              const d = BigInt(delay);
               if (set.length < 1 || set.length > 5 || new Set(set.map(g => g.toBase58())).size !== set.length || set.some(g => g.equals(signer)) || !Number.isInteger(t) || t < 1 || t > set.length) throw new Error('Use 1–5 distinct guardian wallets separate from your owner, with a valid approval threshold.');
               if (d < 60n || d > 2592000n) throw new Error('Choose a delay between 60 seconds and 30 days.');
               const id = BigInt(Date.now()); const selected = client.vaultAddress(signer, id)[0].toBase58();
               const ix = await client.initializeVault(signer, key(mint), { vaultId: id, guardians: set, threshold: t,
-                aiGuardian: ai.trim() ? key(ai) : PublicKey.default, safeAddress: key(safe), delaySeconds: d, dailyLimit: parseAmount(limit, token.decimals) });
+                aiGuardian: ai.trim() ? key(ai) : PublicKey.default, safeAddress: key(safe), delaySeconds: d, dailyLimit: limit.trim() === '0' ? 0n : parseAmount(limit, token.decimals) });
               current.current = selected; setAddress(selected); return [ix];
             })} />
             <Button title="Back to your vaults" tone="quiet" disabled={busy} onPress={() => setCreating(false)} /></>}
@@ -169,31 +189,36 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
     <View style={{ gap: 8 }}><Label>{tab === 'Home' ? 'Your vault' : tab}</Label><Copy style={common.title}>{tab === 'Home' ? 'A little more peace of mind.' : tab === 'Send' ? 'Move money on your terms.' : tab === 'Activity' ? 'Time is on your side.' : tab === 'Guardians' ? 'Separate keys. Shared protection.' : 'Make yourself at home.'}</Copy></View>
     {txNotice}
     {tab === 'Home' && <>
-      <Panel><Status text={v.data.frozen ? 'Outgoing transfers paused' : 'Live balance on devnet'} />
+      <Panel style={{ borderRadius: 28 }}><View style={common.row}><Label>Vault balance</Label><Status text={v.data.frozen ? 'Frozen' : 'Protected'} tone={v.data.frozen ? 'brand' : 'safe'} /></View>
         <Copy style={[common.amount, { fontSize: 38 }]}>{units(view.balance)}</Copy>
-        <Copy selectable style={common.mono}>{v.data.mint.toBase58()}</Copy>
-        <View style={common.divider}><Copy style={common.muted}>Instant allowance remaining</Copy><Copy style={common.num}>{units((now / 1000 - Number(v.data.windowStart.toString()) >= 86400 ? numberId(v.data.dailyLimit) : numberId(v.data.dailyLimit) > numberId(v.data.spentInWindow) ? numberId(v.data.dailyLimit) - numberId(v.data.spentInWindow) : 0n).toString())}</Copy></View>
+        <Copy style={common.muted}>Devnet · Test tokens</Copy><Copy selectable style={common.mono}>{v.data.mint.toBase58()}</Copy>
+        <AllowanceMeter remaining={units(remaining.toString())} total={units(v.data.dailyLimit.toString())} fraction={allowanceFraction(remaining, numberId(v.data.dailyLimit))} />
         <Copy style={common.muted}>Large transfers wait {v.data.delaySeconds.toString()} seconds. Your guardians can cancel during the wait.</Copy>
         <Button title="Send tokens" disabled={!owner || v.data.frozen || busy} onPress={() => setTab('Send')} />
-        <Button title="Deposit tokens" tone="secondary" disabled={busy || !wallet} onPress={() => confirm('Deposit into this vault?', 'All tokens from your wallet’s associated account for this mint will be deposited. Review the exact amount in your wallet.', async signer => {
+        <Field label="Amount to deposit" value={depositAmount} onChangeText={setDepositAmount} keyboardType="decimal-pad" placeholder="0.00" editable={!busy} />
+        <Button title="Deposit tokens" tone="secondary" disabled={busy || !wallet || !depositAmount.trim()} onPress={() => confirm('Deposit into this vault?', `${depositAmount} tokens will move from your wallet to this vault.`, async signer => {
           const latest = await fresh(); const from = getAssociatedTokenAddressSync(latest.data.mint, signer);
-          const source = await getAccount(connection, from, 'confirmed', TOKEN_PROGRAM_ID);
-          return [await client.deposit(latest, signer, from, source.amount)];
+          return [await client.deposit(latest, signer, from, parseAmount(depositAmount, view.decimals))];
         })} />
         <Button title={v.data.frozen ? 'Vault is paused' : 'Freeze vault'} tone="quiet" disabled={!protective || v.data.frozen || busy} onPress={freeze} />
       </Panel>
-      <Panel><Label>Waiting to leave</Label><Copy style={common.num}>{view.withdrawals.length} pending requests</Copy><Button title="Review pending withdrawals" tone="quiet" onPress={() => setTab('Activity')} /></Panel>
-      <Panel><Label>Your protection</Label><Copy>{v.data.threshold} of {v.data.guardianCount} guardians approve rule changes.</Copy><Copy style={common.muted}>{v.data.aiGuardian.equals(PublicKey.default) ? 'No AI guardian is configured.' : 'The AI guardian can cancel or freeze. It cannot withdraw.'}</Copy></Panel>
+      <Panel><Label>Waiting to leave</Label>{view.withdrawals.length === 0 ? <Copy style={common.muted}>No pending requests.</Copy> : view.withdrawals.slice(0, 3).map((w, i) => <View key={w.address.toBase58()} style={[i > 0 && common.divider, { gap: 12 }]}>
+        <Copy style={common.num}>{units(w.data.amount.toString())}</Copy><Copy style={common.muted}>Request {w.data.id.toString()}</Copy>
+        <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
+      </View>)}<Button title="Review pending withdrawals" tone="quiet" onPress={() => setTab('Activity')} /></Panel>
+      <VaultActivity history={view.history} limit={4} />
+      <Panel><Label>Your protection</Label><View style={[common.row, { justifyContent: 'flex-start' }]}><KeyAvatar label="Guardian keys" /><Copy style={{ flex: 1 }}>{v.data.threshold} of {v.data.guardianCount} guardians approve rule changes.</Copy></View><View style={[common.row, { justifyContent: 'flex-start' }]}><KeyAvatar label="AI guardian" ai /><Copy style={[common.muted, { flex: 1 }]}>{v.data.aiGuardian.equals(PublicKey.default) ? 'No AI guardian is configured.' : 'The AI guardian can cancel or freeze. It cannot withdraw.'}</Copy></View></Panel>
     </>}
     {tab === 'Send' && <>
       <Copy style={common.muted}>Enter the recipient’s wallet address. Argus will use its associated token account for this mint.</Copy>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(['delayed', 'instant', 'trusted'] as const).map(mode => <Pressable key={mode} accessibilityRole="radio" accessibilityState={{ checked: mode === sendMode }} style={[s.choice, mode === sendMode && s.selected]} onPress={() => setSendMode(mode)}><Copy style={{ color: c.brand }}>{mode === 'delayed' ? 'With delay' : mode === 'instant' ? 'Daily allowance' : 'Trusted wallet'}</Copy></Pressable>)}</View>
       <Panel><Field label="Recipient wallet" value={destination} onChangeText={setDestination} autoCapitalize="none" autoCorrect={false} />
         <Field label="Token amount" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
+        <Label>Choose your transfer route</Label>
+        <RouteIndicator selected={sendMode} waitLabel={delayLabel(numberId(v.data.delaySeconds))} onSelect={setSendMode} disabled={busy} />
         <Copy style={common.muted}>{sendMode === 'delayed' ? 'Your request starts a countdown. It must be executed separately after the delay.' : sendMode === 'trusted' ? 'The recipient must already be an active trusted wallet.' : 'This transfer uses your remaining daily allowance.'}</Copy>
         <Button title={sendMode === 'delayed' ? 'Review withdrawal request' : 'Review transfer'} disabled={!owner || busy || v.data.frozen || !destination.trim() || !amount.trim()} onPress={() => confirm('Review this transfer?', `${amount} tokens to ${destination}. ${sendMode === 'delayed' ? 'The program will hold the request until its delay ends.' : 'This transfer moves tokens immediately.'}`, async signer => {
           const latest = await fresh(); const receiver = key(destination); const value = parseAmount(amount, view.decimals);
-          if (receiver.equals(latest.address)) throw new Error('Choose a recipient other than the vault.');
+          if (receiver.equals(latest.address) || receiver.equals(PublicKey.default)) throw new Error('Choose a valid recipient wallet other than the vault.');
           const ata = getAssociatedTokenAddressSync(latest.data.mint, receiver, true);
           const create = createAssociatedTokenAccountIdempotentInstruction(signer, ata, receiver, latest.data.mint);
           const ix = sendMode === 'delayed' ? await client.requestWithdrawal(latest, signer, ata, value)
@@ -209,24 +234,29 @@ export function LiveApp({ onDemo, onSentinel, onBusy }: { onDemo: () => void; on
       {view.withdrawals.length === 0 && <Panel><Copy>No pending withdrawals. Your vault is quiet.</Copy></Panel>}
       {view.withdrawals.map(w => <Panel key={w.address.toBase58()}>
         <Copy style={common.amount}>{units(w.data.amount.toString())}</Copy><Copy selectable style={common.mono}>{w.data.destination.toBase58()}</Copy>
-        <Copy style={common.countdown}>{countdown(Number(w.data.executesAt.toString()) * 1000, now)}</Copy>
+        <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
         {w.data.ownerEpoch !== v.data.ownerEpoch && <Copy style={common.muted}>The owner changed. This request can only be cancelled.</Copy>}
-        <Button title="Cancel withdrawal" tone="threat" disabled={!protective || busy} onPress={() => cancel(w)} />
+        <Button title="Cancel withdrawal" tone="secondary" disabled={!protective || busy} onPress={() => cancel(w)} />
         <Button title="Execute withdrawal" tone="secondary" disabled={busy || v.data.frozen || w.data.ownerEpoch !== v.data.ownerEpoch || BigInt(Math.floor(now / 1000)) < numberId(w.data.executesAt)} onPress={() => confirm('Execute this withdrawal?', 'This sends the exact stored amount to the exact stored token account.', async signer => {
           const latest = await fresh(); const request = await client.fetchWithdrawal(w.address, latest.address);
           return [await client.executeWithdrawal(latest, signer, request)];
         })} />
       </Panel>)}
       <Button title="Freeze vault" tone="quiet" disabled={!protective || v.data.frozen || busy} onPress={freeze} />
+      <VaultActivity history={view.history} />
     </>}
     {tab === 'Guardians' && <>
-      <Panel><Label>Guardian threshold</Label><Copy style={common.num}>{v.data.threshold} of {v.data.guardianCount} approvals</Copy>{v.data.guardians.slice(0, v.data.guardianCount).map(g => <Copy key={g.toBase58()} selectable style={common.mono}>{g.toBase58()}</Copy>)}</Panel>
+      <Panel><Label>Guardian threshold</Label><Copy style={common.num}>{v.data.threshold} of {v.data.guardianCount} approvals</Copy>{v.data.guardians.slice(0, v.data.guardianCount).map((g, i) => <View key={g.toBase58()} style={common.row}><KeyAvatar label={`Guardian ${i + 1}`} /><View style={{ flex: 1, gap: 4 }}><Copy>Guardian {i + 1}</Copy><Copy selectable style={[common.mono, { fontSize: 12 }]}>{g.toBase58()}</Copy></View></View>)}</Panel>
+      {view.trusted.length > 0 && <Panel><Label>Trusted wallets</Label>{view.trusted.map(record => <View key={record.address.toBase58()} style={{ gap: 8 }}><Copy selectable style={common.mono}>{record.data.wallet.toBase58()}</Copy>
+        {numberId(record.data.activeAt) > BigInt(Math.floor(now / 1000)) ? <Copy style={common.countdown}>{countdown(Number(record.data.activeAt.toString()) * 1000, now)}</Copy>
+          : <Button title="Send to this trusted wallet" tone="quiet" disabled={!owner || busy || v.data.frozen} onPress={() => { setDestination(record.data.wallet.toBase58()); setSendMode('trusted'); setTab('Send'); }} />}
+      </View>)}</Panel>}
       {view.proposals.map(p => {
         const a = p.data.action; const stale = p.data.guardianEpoch !== v.data.guardianEpoch;
         const ttl = BigInt(client.program.idl.constants?.find(c => c.name === 'proposalTtl')?.value ?? '604800');
         const dead = stale || (numberId(p.data.eta) === 0n && BigInt(Math.floor(now / 1000)) > numberId(p.data.createdAt) + ttl);
         const vetoable = 'addTrusted' in a || 'loosenLimits' in a || 'setSafeAddress' in a || 'setGuardians' in a || ('setAiGuardian' in a && !a.setAiGuardian.key.equals(PublicKey.default));
-        const canVeto = vetoable && (!('setGuardians' in a) || a.setGuardians.guardians.some(g => g.toBase58() === wallet?.address));
+        const canVeto = vetoable && (!('setGuardians' in a) || a.setGuardians.guardians.some((g: PublicKey) => g.toBase58() === wallet?.address));
         return <Panel key={p.address.toBase58()}><Copy style={{ fontFamily: f.semibold, fontSize: 18 }}>{proposalTitle(a)}</Copy>
           <Copy selectable style={common.mono}>{p.address.toBase58()}</Copy>
           <Copy selectable style={common.muted}>{proposalDescription(a, view.decimals)}</Copy>
@@ -284,14 +314,26 @@ function proposalDescription(a: GovAction, decimals: number): string {
   if ('removeTrusted' in a) return `Remove trust for ${a.removeTrusted.wallet.toBase58()}.`;
   if ('setSafeAddress' in a) return `New safe wallet: ${a.setSafeAddress.wallet.toBase58()}.`;
   if ('setAiGuardian' in a) return a.setAiGuardian.key.equals(PublicKey.default) ? 'Disable the AI guardian.' : `New AI guardian: ${a.setAiGuardian.key.toBase58()}.`;
-  if ('setGuardians' in a) return `${a.setGuardians.threshold} approvals needed from: ${a.setGuardians.guardians.map(g => g.toBase58()).join(', ')}.`;
+  if ('setGuardians' in a) return `${a.setGuardians.threshold} approvals needed from: ${a.setGuardians.guardians.map((g: PublicKey) => g.toBase58()).join(', ')}.`;
   const limits = 'tightenLimits' in a ? a.tightenLimits : a.loosenLimits;
   return `Daily allowance: ${formatUnits(limits.dailyLimit.toString(), decimals)} tokens. Delay: ${limits.delaySeconds.toString()} seconds.`;
 }
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: c.ink }, header: { paddingHorizontal: 22, paddingVertical: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  content: { paddingHorizontal: 20, paddingBottom: 28, gap: 20, flexGrow: 1 },
-  nav: { flexDirection: 'row', padding: 8, borderTopWidth: 1, borderTopColor: c.lineSoft },
+  root: { flex: 1, backgroundColor: c.canvas }, header: { backgroundColor: c.ink, paddingHorizontal: 22, paddingVertical: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  content: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 28, gap: 20, flexGrow: 1 },
+  nav: { backgroundColor: c.ink, flexDirection: 'row', padding: 8, borderTopWidth: 1, borderTopColor: c.lineSoft },
   tab: { flex: 1, minHeight: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, active: { backgroundColor: c.brandSoft },
-  choice: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: c.line }, selected: { backgroundColor: c.brandSoft, borderColor: c.brand },
 });
+
+function VaultActivity({ history, limit = 10 }: { history: VaultView['history']; limit?: number }) {
+  return <Panel><Label>Recent activity</Label>
+    {history === null ? <Copy style={common.muted}>Transaction history is unavailable. Refresh to try again.</Copy>
+      : history.length === 0 ? <Copy style={common.muted}>No recent vault transactions returned by devnet.</Copy>
+        : <ActivityTimeline entries={history.slice(0, limit).map(item => ({ id: item.signature,
+          title: item.err ? 'Transaction failed' : item.confirmationStatus === 'finalized' ? 'Transaction finalized' : 'Transaction confirmed',
+          detail: item.blockTime == null ? `Slot ${item.slot}` : new Date(item.blockTime * 1000).toLocaleString(), done: !item.err,
+          onPress: () => { void Linking.openURL(`https://explorer.solana.com/tx/${item.signature}?cluster=devnet`); },
+        }))} />}
+    <Copy style={[common.muted, { fontSize: 12 }]}>Recent transactions involving this vault, as reported by devnet.</Copy>
+  </Panel>;
+}

@@ -20,7 +20,7 @@ log = [(here / 'results.txt').read_text()] if unit_only else [f'Devnet dump SHA2
 (scratch / 'tmp').mkdir(exist_ok=True)
 (scratch / 'deploy').mkdir(exist_ok=True)
 shutil.copyfile(scratch / 'argus.so', scratch / 'deploy/argus.so')
-env = dict(os.environ, CARGO_TARGET_TMPDIR=str(scratch / 'tmp'), CARGO_MANIFEST_DIR=str(root / 'programs/argus'), CARGO_PKG_NAME='argus', CARGO_PKG_VERSION='0.1.0', CARGO_PKG_DESCRIPTION='Created with Anchor')
+env = dict(os.environ, TMPDIR=str(scratch / 'tmp'), CARGO_TARGET_TMPDIR=str(scratch / 'tmp'), CARGO_MANIFEST_DIR=str(root / 'programs/argus'), CARGO_PKG_NAME='argus', CARGO_PKG_VERSION='0.1.0', CARGO_PKG_DESCRIPTION='Created with Anchor')
 rustc = '/home/kolev/.cargo/bin/rustc'
 externs = []
 for name in ['anchor_lang', 'anchor_spl', 'litesvm', 'solana_keypair', 'solana_signer', 'solana_account', 'solana_transaction', 'solana_message']:
@@ -28,7 +28,7 @@ for name in ['anchor_lang', 'anchor_spl', 'litesvm', 'solana_keypair', 'solana_s
     externs.extend(['--extern', name + '=' + str(library)])
 
 def run(args):
-    result = subprocess.run(list(map(str, args)), env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    result = subprocess.run(list(map(str, args)), env=env, cwd=scratch, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     log.append('$ ' + ' '.join(map(str, args)) + '\n' + result.stdout)
     (here / 'results.txt').write_text('\n'.join(log))
     print(result.stdout[-3500:], flush=True)

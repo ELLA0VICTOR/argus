@@ -182,3 +182,17 @@ test state::tests::is_owner_matches_only_owner ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.01s
 
+
+$ /home/kolev/.cargo/bin/rustc --edition=2021 -A warnings -L dependency=/home/kolev/argus-target/debug/deps --extern anchor_lang=/home/kolev/argus-target/debug/deps/libanchor_lang-ae9e028591a707e6.rlib --extern anchor_spl=/home/kolev/argus-target/debug/deps/libanchor_spl-09e70cfe056ddfea.rlib --extern litesvm=/home/kolev/argus-target/debug/deps/liblitesvm-e59f807ec850b8a6.rlib --extern solana_keypair=/home/kolev/argus-target/debug/deps/libsolana_keypair-ca2bea522aa5fba4.rlib --extern solana_signer=/home/kolev/argus-target/debug/deps/libsolana_signer-3d1e4e4706df59f6.rlib --extern solana_account=/home/kolev/argus-target/debug/deps/libsolana_account-ec6e7e735bae8dd7.rlib --extern solana_transaction=/home/kolev/argus-target/debug/deps/libsolana_transaction-6a74bccbe2a77808.rlib --extern solana_message=/home/kolev/argus-target/debug/deps/libsolana_message-1d76c154017f6e18.rlib --test -C strip=symbols --crate-name=argus /mnt/c/Users/kolev/Desktop/argus/programs/argus/src/lib.rs -o /mnt/c/Users/kolev/Desktop/argus/mobile/.program-check/audits/devnet-2026-11-27/unit-bin
+
+$ /mnt/c/Users/kolev/Desktop/argus/mobile/.program-check/audits/devnet-2026-11-27/unit-bin --test-threads=1 --skip __anchor_private
+
+running 5 tests
+test governance::tests::timelocks_match_spec_table ... ok
+test state::tests::guardian_index_finds_every_active_slot ... ok
+test state::tests::guardian_index_ignores_unused_default_slots ... ok
+test state::tests::is_ai_false_for_default_when_ai_disabled ... ok
+test state::tests::is_owner_matches_only_owner ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.01s
+
