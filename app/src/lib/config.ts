@@ -12,8 +12,8 @@ const SENTINEL_BASE: string = (import.meta.env.VITE_SENTINEL_URL as string | und
 export const RPC_URL: string = (import.meta.env.VITE_RPC_URL as string | undefined) ?? `${SENTINEL_BASE}/v1/rpc/devnet`;
 export const WS_URL: string = (import.meta.env.VITE_WS_URL as string | undefined) ?? "wss://api.devnet.solana.com";
 
-/** Set once the EAS build is published. `null` renders an honest "building" state. */
-export const APK_URL: string | null = null;
+/** Standalone Android devnet preview: embedded bundle, no Metro server required. */
+export const APK_URL: string | null = "https://expo.dev/artifacts/eas/H-EnfZuI-_t3FbopjKywARvkT7H0KrEO8Zyo-SxYMGM.apk";
 /** Set once the Solana dApp Store listing is live. */
 export const DAPP_STORE_URL: string | null = null;
 /** Public repo, once Victor makes it public. */

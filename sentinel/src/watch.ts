@@ -16,6 +16,7 @@ import { BN, accounts, connection, PROGRAM_ID, programFor, sendIxs } from "./cha
 import { ensureSchema, sql } from "./db.ts";
 import { DemoError, demoPublic, ensureMint } from "./demo.ts";
 import { loadKey } from "./keys.ts";
+import { lookupScamReports, type ScamReports } from './scam-reports.ts';
 
 const ai = loadKey("ai-guardian");
 export const ACT_AFTER_MS = 40_000;
@@ -50,6 +51,8 @@ function ensureTables() {
         created_at timestamptz not null default now()
       )`;
       await sql`create index if not exists watch_alerts_vault on watch_alerts (vault, created_at)`;
+      await sql`alter table watch_alerts add column if not exists scam_lookup jsonb`;
+      await sql`create table if not exists scam_report_cache (address text primary key, result jsonb not null, expires timestamptz not null)`;
       await sql`create table if not exists watch_log (
         id bigserial primary key,
         vault text not null,
@@ -203,10 +206,26 @@ export async function scanVault(vault: string, force = false) {
       await log(vault, "calling", "Argus is calling the owner. No answer in 40 seconds and it cancels.", id);
       later(sleep(ACT_AFTER_MS + 500).then(() => act(id)));
     }
+    // Enrichment runs independently after the protective deadline is scheduled.
+    later(enrichReports(id, vault, destOwner));
   }
   // Anything overdue (e.g. raised by an earlier request that didn't live long enough).
   const due = (await sql`select id from watch_alerts where vault = ${vault} and status = 'open' and risk = 'critical' and act_at <= ${Date.now()}`) as { id: string }[];
   for (const d of due) later(act(d.id));
+}
+
+async function enrichReports(id: string, vault: string, address: string) {
+  const cached = await sql`select result from scam_report_cache where address = ${address} and expires > now()` as { result: ScamReports }[];
+  const result = cached[0]?.result ?? await lookupScamReports(address);
+  if (!cached.length) {
+    const ttl = result.status === 'unavailable' || result.status === 'unconfigured' ? 300 : result.status === 'matches' ? 21600 : 3600;
+    await sql`insert into scam_report_cache (address, result, expires) values (${address}, ${JSON.stringify(result)}::jsonb, now() + ${ttl} * interval '1 second')
+      on conflict (address) do update set result = excluded.result, expires = excluded.expires`;
+  }
+  await sql`update watch_alerts set scam_lookup = ${JSON.stringify(result)}::jsonb where id = ${id}`;
+  if (result.status === 'matches') {
+    await log(vault, 'scam_reports', `Exact address mentioned in ${result.sources.length} public security report(s). A mention is not proof of wrongdoing.`, id);
+  }
 }
 
 /** The AI key's own decision: cancel and freeze a critical alert nobody resolved. Runs once. */
@@ -289,6 +308,7 @@ type Row = {
   act_at: string | null;
   resolution: Record<string, unknown> | null;
   created_at: string;
+  scam_lookup?: ScamReports | null;
 };
 
 async function toAlert(r: Row) {
@@ -312,6 +332,7 @@ async function toAlert(r: Row) {
     score: r.score,
     reason: r.reason,
     signals: r.signals,
+    scam_lookup: r.scam_lookup ?? null,
     status: r.status === "acting" ? "open" : r.status,
     // Extension: when the AI acts if nobody resolves it (critical only), ms since epoch.
     act_at: r.act_at ? Number(r.act_at) : null,

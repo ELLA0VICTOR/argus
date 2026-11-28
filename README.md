@@ -41,9 +41,10 @@
 | | |
 | --- | --- |
 | **Program (devnet)** | [`4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh`](https://explorer.solana.com/address/4LH7ikNGVVNaemB7eaLGUMbwSBHHqA2hKXTdrfhgD6nh?cluster=devnet) |
-| **Web app** | Run locally (see [Getting started](#getting-started)). The hosted link will be added here when it's deployed. |
-| **"Steal my wallet" demo** | `/demo` in the web app. You get a fresh devnet vault holding 12,000 test dollars, plus its real owner key. Try to drain it: every move is a real transaction against the program, and Argus stops you live. It scores the request, then calls you as the owner: a real AI voice call (ElevenLabs), in the browser or on your own phone if you scan the QR code. Say "cancel", and it cancels and freezes on-chain with its cancel-only key. No wallet or sign-up needed. |
-| **Android app** | [`mobile/`](mobile/). The APK link will be added here when the build is published. |
+| **Web app** | [tryargus.vercel.app/app](https://tryargus.vercel.app/app). Connect a wallet on devnet, or explore the labelled preview. |
+| **"Steal my wallet" demo** | [tryargus.vercel.app/demo](https://tryargus.vercel.app/demo). A fresh devnet vault holds 12,000 test dUSDC, and you get its disposable owner key. Try the instant drain or delayed withdrawal: the program enforces its rules, and Sentinel reacts to the pending request. Answer a real ElevenLabs voice call in the browser, or scan the QR to take it on your phone. Say "cancel" to cancel and freeze on-chain. No wallet or sign-up needed. Rejected attacks are simulated; accepted moves are real devnet transactions. |
+| **Android app** | [Download standalone APK](https://expo.dev/artifacts/eas/H-EnfZuI-_t3FbopjKywARvkT7H0KrEO8Zyo-SxYMGM.apk) · [Build details](https://expo.dev/accounts/vickytor/projects/argus-mobile/builds/0fa26674-a2b1-4508-b04e-1710ec2677d9) · [Setup](mobile/README.md). No Metro or laptop required. Phone wallet/audio sign-off is pending. |
+| **Sentinel** | [Hosted service health](https://argus-sentinel-six.vercel.app/v1/health?deep=1), including database and RPC checks. |
 
 > **Devnet only.** Argus has not been audited by a third party. Use test tokens.
 
@@ -65,20 +66,20 @@
 
 ## Overview
 
-On-chain, whoever holds the key owns the money. A stolen key means a single transaction, final in under a second, and there's no bank to call. Exchanges offer cancellable vaults, but only by holding your keys. Bitcoin vaults need a protocol change that hasn't happened.
+When a wallet key is stolen, an attacker can authorize irreversible transfers. Argus adds a cancellable waiting period to withdrawals of tokens deposited in its Solana vault. It is designed to reduce the damage from a compromised owner key; it does not protect assets left outside the vault or prevent every kind of exploit.
 
 Argus brings the safety of a bank hold to self-custody, enforced by a Solana program:
 
 - **Everyday spending is instant**, within a daily allowance.
 - **Sends to your own trusted addresses are instant**, at any amount.
 - **Anything else waits**, 24 hours by default. You, any guardian or the AI guardian can cancel it during the wait.
-- **If it looks like theft, Argus phones you.** Say "cancel", and it's cancelled on-chain by a key that can only cancel or freeze. It can never move funds.
+- **If it looks like theft, Argus calls in the app.** Cancel through your wallet; Sentinel can also cancel and freeze critical unresolved requests with its restricted AI key. That key cannot move funds. The disposable demo demonstrates the AI-signed cancel directly from the voice decision.
 
 ## How Argus works
 
 1. **Large withdrawals wait.** `request_withdrawal` creates a pending withdrawal with a public countdown. Nothing moves until it matures.
-2. **An AI guardian watches each one.** Sentinel scores every request: the destination's age, lookalike (address-poisoning) checks, the share of the vault, the time of day, and public scam reports.
-3. **It calls you.** On a high score Argus phones the owner. "Cancel" makes Sentinel sign `cancel_withdrawal` with the cancel-only AI key.
+2. **Sentinel watches pending withdrawals.** Current scoring uses the destination's on-chain history, lookalike checks, the share of the vault, first-time destinations and the time of day. Public scam-report lookups through Firecrawl are planned, not yet implemented.
+3. **It calls in the app.** A critical real-vault alert opens the ElevenLabs call while the app is active. Cancel uses the connected wallet; standing down a critical alert requires a guardian's signed dismissal. Sentinel can cancel and freeze a critical alert still unresolved after 40 seconds. In the isolated demo, the voice decision goes to Sentinel; no answer within 90 seconds triggers its protective action. Calls use internet audio, not SMS or Twilio.
 4. **Guardians recover.** The guardian threshold rotates the owner key. That bumps `owner_epoch`, which voids every withdrawal the old key requested.
 
 ## Who can do what
@@ -104,9 +105,10 @@ flowchart LR
     Mobile --> Program
     Program --> Vault[("Vault PDA + token account")]
     Program -- events --> Sentinel["Sentinel (AI guardian service)"]
-    Sentinel -- risk score + reason --> Call["Phone call / push alert"]
-    Call -- "owner says cancel" --> Sentinel
-    Sentinel -- "cancel_withdrawal (cancel-only key)" --> Program
+    Sentinel -- risk score + reason --> Call["In-app voice call / alert"]
+    Call -- "user chooses cancel" --> Web
+    Call -- "user chooses cancel" --> Mobile
+    Sentinel -- "critical unresolved: cancel + freeze only" --> Program
 ```
 
 | Layer | Responsibility |
@@ -114,7 +116,7 @@ flowchart LR
 | **Program** | Holds the funds and enforces every rule: delays, allowance, roles, governance, epochs. It's the security boundary. |
 | **Sentinel** | Node service. Watches pending withdrawals, scores risk from on-chain signals, alerts the owner, and signs cancel or freeze with a key that can do nothing else. It also runs the live demo. |
 | **Web app** | Landing page, the vault app (home, send, activity, guardians, settings) and the live demo. |
-| **Android app** | The same vault on Solana Mobile, with push alerts and one-tap cancel through Mobile Wallet Adapter. |
+| **Android app** | Native vault actions and signed decisions through Mobile Wallet Adapter; foreground monitoring, in-app voice and validated alert deep links. Background push still needs backend delivery and FCM credentials. |
 
 ## The program
 
@@ -128,8 +130,8 @@ flowchart LR
 | Governance | `propose`, `approve`, `veto`, `execute_proposal`, `close_proposal` |
 
 **Accounts:** `Vault`, `Withdrawal`, `Proposal`, `TrustedAddress`, all PDAs. Governance actions:
-- **Immediate:** `RotateOwner`, `Unfreeze`, `RemoveTrusted`, `TightenLimits`.
-- **Wait the full delay and can be vetoed:** `AddTrusted`, `LoosenLimits`, `SetSafeAddress`, `SetGuardians`, `SetAiGuardian`.
+- **Immediate after threshold approval:** `RotateOwner`, `Unfreeze`, `RemoveTrusted`, `TightenLimits`, and disabling the AI guardian.
+- **Wait the full delay and can be vetoed:** `AddTrusted`, `LoosenLimits`, `SetSafeAddress`, `SetGuardians`, and enabling/changing `SetAiGuardian`.
 - **Proposals expire** if they don't reach the threshold within 7 days.
 
 **Key guarantees** (from [the spec](docs/PROGRAM-SPEC.md), each one tested):
@@ -179,7 +181,7 @@ npm run dev      # http://localhost:5173
 npm run build
 ```
 
-The vault app currently runs on a clearly labelled sample vault. The wallet connection and live devnet data are in progress, see [Status](#status).
+Without a wallet, the app shows a labelled preview. Connect a devnet wallet to discover or create a real vault, get test funds, deposit and transact. For the hosted backend locally, copy `app/.env.example` to `app/.env` and set `VITE_SENTINEL_URL=https://argus-sentinel-six.vercel.app`; keep the default for a local Sentinel server. Values prefixed with `VITE_` are public browser configuration and must never contain signing keys.
 
 ### Sentinel (AI guardian service)
 
@@ -199,7 +201,9 @@ The web app finds Sentinel through `VITE_SENTINEL_URL` (default `http://localhos
 
 ### Android app
 
-See [`mobile/README.md`](mobile/README.md).
+Install the [standalone APK](https://expo.dev/artifacts/eas/H-EnfZuI-_t3FbopjKywARvkT7H0KrEO8Zyo-SxYMGM.apk) on Android, install an MWA-compatible wallet such as Solflare, and select devnet. Use test tokens only. Development/build commands and the complete feature list are in [`mobile/README.md`](mobile/README.md).
+
+Mobile validation recorded on 2026-11-27: **75/75 automated tests**, **29/29 live devnet SDK/service checks**, TypeScript and Android export pass. The APK's ZIP integrity, embedded bundle and merged permissions were checked. These do not replace physical wallet, microphone/audio and interrupted-session tests. See the [mobile audit](docs/audits/codex-mobile-final.md) and [APK metadata](docs/audits/codex-mobile-apk-preview-2026-11-27.json).
 
 ## Repository structure
 
@@ -272,6 +276,10 @@ argus/
 │   │   ├── claude-sentinel-r1.md
 │   │   ├── codex-devnet-2026-11-27.md
 │   │   ├── codex-mobile-apk-2026-11-27.json
+│   │   ├── codex-mobile-apk-preview-2026-11-27.json
+│   │   ├── codex-mobile-dependencies-2026-11-27.json
+│   │   ├── codex-mobile-final.md
+│   │   ├── codex-mobile-live-2026-11-27.json
 │   │   ├── codex-r1-manifest-final.json
 │   │   ├── codex-r1-manifest.json
 │   │   ├── codex-r1-reconciliation.md
@@ -296,6 +304,7 @@ argus/
 │   ├── scripts/
 │   │   ├── brand-assets.mjs
 │   │   ├── build-android.mjs
+│   │   ├── smoke-live.ts
 │   │   └── smoke-sentinel.ts
 │   ├── src/
 │   │   ├── components/
@@ -305,15 +314,18 @@ argus/
 │   │   │   ├── GuardianCall.tsx
 │   │   │   ├── Intro.tsx
 │   │   │   ├── NativeVoice.tsx
+│   │   │   ├── ProposalComposer.tsx
 │   │   │   ├── SignalIcon.tsx
 │   │   │   ├── TransactionNotice.tsx
 │   │   │   ├── ui.tsx
 │   │   │   └── VaultPatterns.tsx
 │   │   ├── domain/
+│   │   │   ├── amountInput.ts
 │   │   │   ├── demo.test.ts
 │   │   │   ├── demo.ts
 │   │   │   ├── guardianCall.test.ts
 │   │   │   ├── guardianCall.ts
+│   │   │   ├── liveProtection.ts
 │   │   │   ├── userMessage.ts
 │   │   │   ├── vaultMetrics.test.ts
 │   │   │   └── vaultMetrics.ts
@@ -327,8 +339,10 @@ argus/
 │   │   │   ├── client.ts
 │   │   │   ├── errors.test.ts
 │   │   │   ├── errors.ts
+│   │   │   ├── history.ts
 │   │   │   ├── node-files-unavailable.ts
 │   │   │   ├── read.ts
+│   │   │   ├── rpcFetch.ts
 │   │   │   ├── runtime.ts
 │   │   │   ├── transactions.test.ts
 │   │   │   └── transactions.ts
@@ -349,6 +363,9 @@ argus/
 │   │   │   ├── demo.test.ts
 │   │   │   ├── demo.ts
 │   │   │   ├── demoRuntime.ts
+│   │   │   ├── live.test.ts
+│   │   │   ├── live.ts
+│   │   │   ├── liveRuntime.ts
 │   │   │   ├── mock.ts
 │   │   │   ├── rules.ts
 │   │   │   ├── runtime.ts
@@ -358,6 +375,7 @@ argus/
 │   │   ├── services/
 │   │   │   ├── demoEvents.ts
 │   │   │   ├── notifications.ts
+│   │   │   ├── useLiveProtection.ts
 │   │   │   ├── voice.ts
 │   │   │   └── wallet.ts
 │   │   ├── polyfills.ts
@@ -452,12 +470,14 @@ argus/
 
 ## Security
 
-- **Devnet only, no third-party audit.** Two independent internal audit rounds: [Claude](docs/audits/claude-r1.md), [Codex](docs/audits/codex-r1.md), and the [reconciliation](docs/audits/codex-r1-reconciliation.md).
+- **Devnet only, no third-party audit.** Independent internal program reviews: [Claude round 1](docs/audits/claude-r1.md), [Codex round 1](docs/audits/codex-r1.md), and the [reconciliation](docs/audits/codex-r1-reconciliation.md). The [mobile source/integration audit](docs/audits/codex-mobile-final.md) records fixed issues and remaining device/dependency work.
 - **Sentinel audit.** [Round 1](docs/audits/claude-sentinel-r1.md) covers the off-chain service and the app's transaction code. It found 11 issues (2 high), all fixed and each proven by a check (`npm run check:audit`).
 - **Verified deploy.** The deployed bytecode matches the tested build (SHA-256 `831417e4…72f9`), recorded in [HANDOFF](docs/HANDOFF.md).
 - **Upgrade authority.** For the hackathon, a single developer wallet can upgrade the program. Before real funds it should move to a multisig or the program should be made immutable.
 - **Known limit.** If a thief holds both the owner key and enough guardian keys to meet the threshold, they can eventually take the funds. Keep keys on separate devices and with separate people.
-- **Argus never asks for your seed phrase.** A call only ever offers one action: say "cancel".
+- **Argus never asks for your seed phrase.** Voice decisions cannot choose arbitrary payment destinations. Normal-vault transactions still require the connected wallet; the demo uses only disposable test keys.
+- **Protection has a defined scope.** A compromised owner can still spend the available allowance and send to already trusted destinations. Keep those limits and trusted addresses conservative. Only assets deposited in an Argus vault receive its withdrawal rules.
+- **Dependency work remains.** The mobile installed production graph reports 3 high and 13 moderate advisories. TOML is patched and Android excludes the vulnerable bigint-buffer Node addon; remaining upstream/Node-tooling advisories are tracked in the mobile audit. The release is not represented as bug-free or production-ready.
 
 ## Documentation
 
@@ -476,11 +496,23 @@ argus/
 | Program | ✅ Deployed to devnet, 148 tests passing, audit round 1 done |
 | Web: landing page and vault app | ✅ Live on devnet: connect a wallet, create a vault, deposit, send, release, cancel, freeze, guardian proposals (preview vault when no wallet) |
 | Web: "steal my wallet" live demo | ✅ Live on devnet (Sentinel cancels and freezes on-chain) |
-| Sentinel: demo, watcher, cancel and freeze | ✅ Built for Vercel and Neon; tested locally (smoke, race and timeout checks) |
+| Sentinel: demo, watcher, cancel and freeze | ✅ Hosted on Vercel with Neon; online demo, race/timeout and real-vault checks recorded in HANDOFF |
 | Voice call: live in-browser call with the Argus agent (ElevenLabs) | ✅ Built: the agent cancels on "no, cancel it" |
 | The owner's real phone rings: scan a QR on `/demo`, take the live ElevenLabs call on your phone, and the laptop follows along | ✅ Built (no phone number or Twilio needed) |
 | Hosting: web and Sentinel on Vercel | ✅ Live: tryargus.vercel.app (full devnet run passes there) |
 | Sentinel watches real vaults: scores each withdrawal, calls you in the app, cancels and freezes critical ones nobody confirms | ✅ Built; devnet checks pass (13 backend, 11 in-browser) |
-| Sentinel: scam lookups | ⏳ Next |
+| Sentinel: public scam-report lookups | Planned: Firecrawl search and evidence-backed report matching; not implemented or needed for current on-chain risk rules |
 | Web: wallet connection (Phantom, Solflare, Backpack) and test-money faucet | ✅ Built; full devnet run passes (22 checks) |
-| Android app | 🔨 In progress |
+| Android app | Standalone APK built; live vault/governance/monitoring/voice implemented; 75 tests + 29 live checks pass. Physical MWA/audio sign-off pending |
+| Background mobile push | Pending: FCM credentials plus Sentinel device registration and delivery; foreground calls and deep-link handling are implemented |
+| Solana dApp Store | Publisher setup, submission and listing pending |
+| Demo video and hackathon submission | Pending: record the live flow, generate narration and export under 3:00; see [recording plan](docs/DEMO-SCRIPT.md) |
+
+### Remaining work
+
+1. Run the installed APK on the phone: cold launch without Metro, MWA connect/reject/account switch, signed actions, confirmation recovery, microphone/audio and call-button fallback.
+2. Implement Firecrawl-backed scam-report enrichment. Search the exact recipient wallet address (not just its token account), retain source URLs and checked timestamps, and cache bounded results. A timeout or no report means **unknown**, never "safe". Web content is evidence, not instructions to the signer; it must not weaken existing on-chain risk floors or delay cancel/freeze. Firecrawl supports [search with optional page scraping](https://docs.firecrawl.dev/features/search). This requires service-side configuration and integration tests before a live claim.
+3. Add real background notification registration/delivery and FCM credentials. The draft SIWS/contact routes are not implemented by the hosted service; its legacy mock tests do not make those features live.
+4. Finish device sign-off and dependency remediation, dApp Store submission, the under-three-minute video, and the final hackathon submission. Build completion is not store publication.
+
+The video plan uses the existing no-sign-up heist and QR phone handoff, shows real cancellation/freeze receipts, and reserves time for the Android/MWA flow. It must not show fabricated scam-report findings or claim that Argus prevents every Web3 hack.

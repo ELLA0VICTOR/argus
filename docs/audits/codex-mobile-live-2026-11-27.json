@@ -1,0 +1,135 @@
+{
+  "at": "2026-11-27T21:30:13.229Z",
+  "cluster": "devnet",
+  "vaults": [
+    "KzGY1Re5z7iZimFyGZWmR1YxooegGkTUwVWo8qq3sXg",
+    "E66cKuBdpGX2eUrsokbNs4K56t8MNjufrUrBeXKTbSaz"
+  ],
+  "owner": "7VPZW7W4oYn5PY5LZuCRxfQqBo5tTWNQepgGx1SVbPLB",
+  "guardian": "CtC4SwzCx2aZNawSf7zrE8QLHAsNQNCZeuxamU1rkHHk",
+  "receipts": [
+    {
+      "label": "Hosted health identity"
+    },
+    {
+      "label": "Owner faucet"
+    },
+    {
+      "label": "Guardian faucet"
+    },
+    {
+      "label": "Create vault",
+      "signature": "34wXTV4KbqRdK2L886xpvDqq7TujYSh8sn743s9VTYdrB4ErhmyBu1Adf7S5C1r5gUAYqGZHcRMDP6QDtNHFph2w",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Deposit 500 dUSDC",
+      "signature": "3r8vUjvJByYS2zNRkFSaNuoZNmrotq8Mo1bGmwVtbf8Nz94p9UC6wP9uX5pKbmxLUuQrTiBebjRa84JT4mABNMhZ",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Reject an oversized instant send before signing",
+      "message": "This exceeds the remaining daily allowance."
+    },
+    {
+      "label": "Instant send 50 dUSDC",
+      "signature": "5PaPzCU9fUmgHAZ7MTGiyhENsnqizwJ31iwDvsjsf7twJKysrPcWvfCuCU79symrVS8uJJ1Q98vtBpUrJCTYwkPg",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Request 100 dUSDC",
+      "signature": "2FR5j6fKm6XaLrGuGsVKkTLDr3Jr1PkYai9ZUby6M97uR63zYf8Ro9fVo7WTXWrB41dCW5w27jr7NviMMDS5Xk79",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Reject early release",
+      "message": "The withdrawal or proposal delay has not ended."
+    },
+    {
+      "label": "Guardian proposes trusted address",
+      "signature": "5qKbSAMpNtnCZQpUNVK2eVHuJkGSQGse13FtqmVvmaMUwiXwQTAPaynHfRvV1t1MY49KmMnFLd2kwkp3pTvFtAbU",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Release after the delay",
+      "signature": "5fKbk6JbAckcqxsbJi1sW9Bx5U6qBbmdHAkgcvUCjZSLifaXdataPoWfYym8dye6xgo5d84UmahoAgQWEyHv2d9o",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Apply approved trusted address",
+      "signature": "4GJeBCks1exbTA2SVX9VMrpZQQyx1MkxAbpgs5Y1A2E8exvF9efx42Y2i4oB3KeQkTdPwBN3Tb2y3umk8Q3R6mvL",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Trusted send beyond remaining allowance",
+      "signature": "4pDRk1yMgbYf4EEpKbcx8ZJPYVWp3nSj7hHe11gfHm6MN12RJQokBWqsBH6uWLo8P5vFXsnBQCKJHchTavuyCSmR",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Freeze with owner key",
+      "signature": "3bPk5FeNMyo4oJVC2Z2dPqWXG2b3ViquHz2Ysye4d92yXPSETrsMrfX2mn8Ye6ke1Kw2vCd8wgxEW9GNcsWAoEnX",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Guardian proposes unfreeze",
+      "signature": "2mf6bZUNSpoUg1UtTTU4fgBBP5qYjDfYM9VffRgvdgw2oZuZFkJc3B18MsLq9aPR7DoPrxRGmuVMwtAySEkq8sdf",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Apply approved unfreeze",
+      "signature": "3FFFDB8GsZmSnXFVUUkt5p4qnpBiSfewax6oSvS71XwFA4xjXPEyAkWFKWuXBi5T7FZCnny6Gy2gGmUgpnJSzg8Z",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Guardian sweeps only to preset safe address and freezes",
+      "signature": "54EufCPTNB8DXzSh5mPGJFoANKYYkakpHMaP6ExZMKTpLNkoua2Lpz9wuPTfHA8EvHHiZ5F8zfX2ZSRQdLJZYbEU",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Sweep balance and frozen state verified"
+    },
+    {
+      "label": "IDL-decoded live history"
+    },
+    {
+      "label": "Create monitored vault",
+      "signature": "3JszRQE1nEjB1WrSRmXwCfqx1ArhzMmyyVjHzwDCQNQCBPLAeWTUo9so2ed8doTV5bBpq5gdtSvDWyNMCsNRSVRX",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Deposit 200 into monitored vault",
+      "signature": "32wwLzWTof57d2n4YtmWvC4c42tcEAZGByL9S95a8zBz7kikZk8NC5wna7cALkorHYkKpYz56djpW2dCeS6HgpZu",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Request suspicious 75% withdrawal",
+      "signature": "3PUTpCGyVJVNKRDVssFA4onbcrsSbwP1TgvG4SWbraZa9t6bqS7g99Gn8n5Jxcv9DsgiWd8FuMnKkHjNtJdUMr1T",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Real critical Sentinel alert"
+    },
+    {
+      "label": "Owner cannot dismiss critical alert"
+    },
+    {
+      "label": "Guardian signs exact dismissal message"
+    },
+    {
+      "label": "Dismissal preserves withdrawal delay and does not execute"
+    },
+    {
+      "label": "Owner cancels monitored withdrawal",
+      "signature": "4WjC7MnMQeaGrAscoPathkAxexjdGwcAm7izSHGLWBm2Grq7Z2DvyDGRidk6fJaqStPfieSdaxbZz5t9JQUwckcR",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Guardian freezes monitored vault",
+      "signature": "46BZcNHuzM788siW42276D9tLe42VqS3CDQ1Bt8rjM6nTmTjthh7vksoigNQmYcumgKeY7W4BtqGsiwkP2Fmxwzr",
+      "message": "Confirmed on Solana devnet."
+    },
+    {
+      "label": "Monitored vault funds stayed put"
+    }
+  ]
+}

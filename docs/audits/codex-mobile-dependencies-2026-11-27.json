@@ -1,0 +1,220 @@
+{
+  "at": "2026-11-27T21:40:03.406Z",
+  "scope": "npm audit --omit=dev; installed mobile graph",
+  "counts": {
+    "info": 0,
+    "low": 0,
+    "moderate": 13,
+    "high": 3,
+    "critical": 0,
+    "total": 16
+  },
+  "mitigations": {
+    "toml": "override 5.0.1",
+    "bigintBuffer": "Android Metro selects dist/browser.js; dist/node.js absent in export source map"
+  },
+  "packages": [
+    {
+      "name": "@anchor-lang/borsh",
+      "severity": "moderate",
+      "range": ">=0.30.2",
+      "fixAvailable": true,
+      "advisories": []
+    },
+    {
+      "name": "@anchor-lang/core",
+      "severity": "moderate",
+      "range": "0.30.2 - 1.2.2",
+      "fixAvailable": {
+        "name": "@anchor-lang/core",
+        "version": "0.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@config-plugins/react-native-webrtc",
+      "severity": "moderate",
+      "range": ">=13.0.0",
+      "fixAvailable": {
+        "name": "@config-plugins/react-native-webrtc",
+        "version": "12.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@expo/fingerprint",
+      "severity": "moderate",
+      "range": ">=0.11.12-canary-20250303-4dba60e",
+      "fixAvailable": {
+        "name": "expo",
+        "version": "52.0.49",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@solana-mobile/mobile-wallet-adapter-protocol-web3js",
+      "severity": "moderate",
+      "range": "*",
+      "fixAvailable": false,
+      "advisories": []
+    },
+    {
+      "name": "@solana/buffer-layout-utils",
+      "severity": "high",
+      "range": "*",
+      "fixAvailable": {
+        "name": "@solana/spl-token",
+        "version": "0.1.8",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@solana/spl-token",
+      "severity": "high",
+      "range": "*",
+      "fixAvailable": {
+        "name": "@solana/spl-token",
+        "version": "0.1.8",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@solana/spl-token-group",
+      "severity": "moderate",
+      "range": "*",
+      "fixAvailable": {
+        "name": "@solana/spl-token",
+        "version": "0.1.8",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@solana/spl-token-metadata",
+      "severity": "moderate",
+      "range": "*",
+      "fixAvailable": {
+        "name": "@solana/spl-token",
+        "version": "0.1.8",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "@solana/web3.js",
+      "severity": "moderate",
+      "range": "<=0.0.0-pr-29130 || 0.0.4 - 1.99.0",
+      "fixAvailable": {
+        "name": "@anchor-lang/core",
+        "version": "0.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "bigint-buffer",
+      "severity": "high",
+      "range": "*",
+      "fixAvailable": {
+        "name": "@solana/spl-token",
+        "version": "0.1.8",
+        "isSemVerMajor": true
+      },
+      "advisories": [
+        {
+          "title": "bigint-buffer Vulnerable to Buffer Overflow via toBigIntLE() Function",
+          "url": "https://github.com/advisories/GHSA-3gc7-fjrx-p6mg",
+          "range": "<=1.1.5"
+        }
+      ]
+    },
+    {
+      "name": "expo",
+      "severity": "moderate",
+      "range": ">=53.0.0-canary-20241211-61c49bd",
+      "fixAvailable": {
+        "name": "expo",
+        "version": "52.0.49",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "jayson",
+      "severity": "moderate",
+      "range": "2.0.6 - 4.3.0",
+      "fixAvailable": {
+        "name": "@anchor-lang/core",
+        "version": "0.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": []
+    },
+    {
+      "name": "minimatch",
+      "severity": "moderate",
+      "range": "7.0.0 - 11.0.0",
+      "fixAvailable": {
+        "name": "expo",
+        "version": "52.0.49",
+        "isSemVerMajor": true
+      },
+      "advisories": [
+        {
+          "title": "minimatch has potential denial of service via globparts amplification",
+          "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+          "range": ">=7.0.0 <11.0.1"
+        }
+      ]
+    },
+    {
+      "name": "stream-json",
+      "severity": "moderate",
+      "range": "<=3.5.0",
+      "fixAvailable": {
+        "name": "@anchor-lang/core",
+        "version": "0.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": [
+        {
+          "title": "stream-json: pick/ignore/filter/replace filters are O(depth²) on nested input — small crafted JSON blocks the event loop for seconds→minutes (DoS)",
+          "url": "https://github.com/advisories/GHSA-528h-pc64-c93x",
+          "range": "<=3.4.0"
+        },
+        {
+          "title": "stream-json: JSONC parser and verifier re-scan the whole accumulated comment on every input chunk",
+          "url": "https://github.com/advisories/GHSA-hqr4-qq8f-hg3x",
+          "range": "<=3.5.0"
+        },
+        {
+          "title": "stream-json has a prototype pollution issue: Assembler writes this.current[this.key] on plain objects",
+          "url": "https://github.com/advisories/GHSA-mjw6-4jj6-33hc",
+          "range": "<3.6.0"
+        }
+      ]
+    },
+    {
+      "name": "uuid",
+      "severity": "moderate",
+      "range": "<11.1.1",
+      "fixAvailable": {
+        "name": "@anchor-lang/core",
+        "version": "0.0.0",
+        "isSemVerMajor": true
+      },
+      "advisories": [
+        {
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "range": "<11.1.1"
+        }
+      ]
+    }
+  ]
+}

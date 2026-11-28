@@ -11,8 +11,8 @@ import { limit, visitorKey } from "./limits.ts";
 
 const funder = loadKey("funder");
 const DUSDC = 1_000n * 1_000_000n;
-const SOL_DRIP = 0.1 * LAMPORTS_PER_SOL;
-const SOL_IF_BELOW = 0.05 * LAMPORTS_PER_SOL;
+const SOL_DRIP = 0.2 * LAMPORTS_PER_SOL;
+const SOL_IF_BELOW = 0.1 * LAMPORTS_PER_SOL;
 const FUNDER_RESERVE = 1 * LAMPORTS_PER_SOL;
 // Global caps per day, whatever the number of visitors or addresses: they
 // bound what the funder can lose (each claim also pays ~0.002 SOL account rent).

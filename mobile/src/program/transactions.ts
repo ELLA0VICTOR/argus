@@ -1,4 +1,4 @@
-import { Connection, PublicKey, Transaction, VersionedTransaction, type TransactionInstruction } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, VersionedTransaction, type TransactionInstruction, type RpcResponseAndContext, type SignatureResult } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { transactionErrorMessage, UNKNOWN_TRANSACTION_MESSAGE } from './errors.ts';
 
@@ -15,8 +15,17 @@ export async function restorePendingTransaction(store: TransactionStore): Promis
   const raw = await store.getItemAsync(PENDING_TRANSACTION_KEY);
   if (!raw) return null;
   const state = JSON.parse(raw) as TransactionState;
-  return typeof state?.signature === 'string' && state.signature && ['sending', 'confirming', 'unknown'].includes(state.phase)
-    ? { ...state, phase: 'unknown' } : null;
+  if (!state || typeof state !== 'object' || !['idle', 'preparing', 'wallet', 'sending', 'confirming', 'confirmed', 'failed', 'unknown'].includes(state.phase)) throw new Error('Stored transaction status is unreadable.');
+  if (['sending', 'confirming', 'unknown'].includes(state.phase)) {
+    try {
+      if (typeof state.signature !== 'string' || bs58.decode(state.signature).length !== 64 ||
+        typeof state.blockhash !== 'string' || bs58.decode(state.blockhash).length !== 32 ||
+        !Number.isSafeInteger(state.lastValidBlockHeight) || state.lastValidBlockHeight! <= 0 ||
+        (state.programs !== undefined && (!Array.isArray(state.programs) || state.programs.some(p => bs58.decode(p).length !== 32)))) throw new Error();
+    } catch { throw new Error('Stored transaction status is unreadable.'); }
+    return { ...state, phase: 'unknown' };
+  }
+  return null;
 }
 export const saveTransaction = (store: TransactionStore, state: TransactionState) => store.setItemAsync(PENDING_TRANSACTION_KEY, JSON.stringify(state));
 export const transactionUrl = (signature: string) => `https://explorer.solana.com/tx/${encodeURIComponent(signature)}?cluster=devnet`;
@@ -24,6 +33,22 @@ export const transactionBusy = (state: TransactionState) => ['preparing', 'walle
 
 export async function requireDevnet(connection: Connection): Promise<void> {
   if (await connection.getGenesisHash() !== DEVNET_GENESIS) throw new Error('Choose a Solana devnet RPC connection.');
+}
+
+/** The hosted relay is HTTP-only. Poll confirmation with a deadline, without a WebSocket dependency. */
+export async function confirmSignedTransaction(connection: Connection, signature: string, lastValidBlockHeight: number,
+  options: { now?: () => number; sleep?: (ms: number) => Promise<void>; timeoutMs?: number } = {}): Promise<RpcResponseAndContext<SignatureResult>> {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const deadline = now() + (options.timeoutMs ?? 45_000);
+  while (now() < deadline) {
+    const result = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+    const status = result.value[0];
+    if (status && ['confirmed', 'finalized'].includes(status.confirmationStatus ?? '')) return { context: result.context, value: { err: status.err } };
+    if (!status && await connection.getBlockHeight('confirmed') > lastValidBlockHeight) throw new Error('Confirmation is uncertain after blockhash expiry.');
+    await sleep(1500);
+  }
+  throw new Error('Confirmation timed out.');
 }
 
 /** Wallet signs; this app broadcasts to its verified devnet RPC. Never automatically retries a send. */
@@ -51,7 +76,7 @@ export async function runTransaction(connection: Connection, signer: PublicKey, 
     const returned = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: 'confirmed', maxRetries: 0 });
     if (returned !== signature) return update({ ...state, phase: 'unknown', message: 'The RPC returned an unexpected signature. Check status before retrying.' });
     update({ ...state, phase: 'confirming' });
-    const result = await connection.confirmTransaction({ signature, ...recent }, 'confirmed');
+    const result = await confirmSignedTransaction(connection, signature, recent.lastValidBlockHeight);
     if (result.value.err) return update({ ...state, phase: 'failed', message: transactionErrorMessage(result.value.err, instructions.map(ix => ix.programId.toBase58())) });
     return update({ ...state, phase: 'confirmed', message: 'Confirmed on Solana devnet.' });
   } catch (error) {
@@ -72,8 +97,9 @@ export async function checkTransaction(connection: Connection, current: Transact
   if (!current.signature) return current;
   await requireDevnet(connection);
   const { value: [status] } = await connection.getSignatureStatuses([current.signature], { searchTransactionHistory: true });
-  if (status?.err) return { ...current, phase: 'failed', message: transactionErrorMessage(status.err, current.programs ?? []) };
-  if (status && ['confirmed', 'finalized'].includes(status.confirmationStatus ?? '')) return { ...current, phase: 'confirmed', message: 'Confirmed on Solana devnet.' };
+  if (status && ['confirmed', 'finalized'].includes(status.confirmationStatus ?? '')) return status.err
+    ? { ...current, phase: 'failed', message: transactionErrorMessage(status.err, current.programs ?? []) }
+    : { ...current, phase: 'confirmed', message: 'Confirmed on Solana devnet.' };
   if (!status && current.lastValidBlockHeight && await connection.getBlockHeight('confirmed') > current.lastValidBlockHeight) {
     return { ...current, phase: 'failed', message: 'This transaction expired without a confirmed signature. Refresh before retrying.' };
   }

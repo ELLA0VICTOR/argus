@@ -3,12 +3,13 @@ import { test } from 'node:test';
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { Buffer } from 'buffer';
-import { DEVNET_GENESIS, checkTransaction, parseAmount, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from './transactions.ts';
+import { DEVNET_GENESIS, confirmSignedTransaction, checkTransaction, parseAmount, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from './transactions.ts';
 import { ARGUS_PROGRAM_ID } from './client.ts';
 import { ARGUS_ERRORS } from './errors.ts';
 import { readFileSync } from 'node:fs';
 import { URL } from 'node:url';
 import { formatTypedAmount } from '../domain/amountInput.ts';
+import { createRpcFetch } from './rpcFetch.ts';
 
 test('the required genesis matches the independently queried deployment cluster', () => {
   const observed = JSON.parse(readFileSync(new URL('../../../docs/audits/devnet-2026-11-27/deployment.json', import.meta.url), 'utf8'));
@@ -31,7 +32,8 @@ function fixture() {
     const signed = Transaction.from(bytes); assert(signed.verifySignatures());
     return bs58.encode(signed.signature!);
   };
-  connection.confirmTransaction = async () => ({ context: { slot: 1 }, value: { err: null } });
+  connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [{ slot: 1, confirmations: 1, err: null, confirmationStatus: 'confirmed' }] });
+  connection.getBlockHeight = async () => 90;
   const ix = new TransactionInstruction({ programId: ARGUS_PROGRAM_ID, keys: [{ pubkey: signer.publicKey, isSigner: true, isWritable: false }], data: Buffer.alloc(0) });
   const sign = async (tx: Transaction) => { tx.partialSign(signer); return tx; };
   const persist = async (state: TransactionState) => { assert(state.signature); persisted = true; };
@@ -54,7 +56,7 @@ test('native SecureStore can persist a signed transaction and restore its retry 
   };
   assert.equal(await restorePendingTransaction(store), null);
   const f = fixture();
-  f.connection.confirmTransaction = async () => { throw new Error('lost connection'); };
+  f.connection.getSignatureStatuses = async () => { throw new Error('lost connection'); };
   const result = await runTransaction(f.connection, f.signer.publicKey, [f.ix], f.sign, f.emit,
     async state => { await saveTransaction(store, state); await f.persist(state); });
   assert.equal(result.phase, 'unknown');
@@ -102,13 +104,13 @@ test('ambiguous transport failure keeps the signed signature and blocks a second
 
 test('confirmation failure maps the failing Argus instruction including its new expiry error', async () => {
   const f = fixture();
-  f.connection.confirmTransaction = async () => ({ context: { slot: 1 }, value: { err: { InstructionError: [0, { Custom: 6032 }] } } });
+  f.connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [{ slot: 1, confirmations: 1, err: { InstructionError: [0, { Custom: 6032 }] }, confirmationStatus: 'confirmed' }] });
   const result = await runTransaction(f.connection, f.signer.publicKey, [f.ix], f.sign, f.emit, f.persist);
   assert.equal(result.phase, 'failed'); assert.equal(result.message, ARGUS_ERRORS[6032].message);
 });
 
 test('unknown confirmation can recover without broadcasting again', async () => {
-  const f = fixture(); f.connection.confirmTransaction = async () => { throw new Error('timeout'); };
+  const f = fixture(); f.connection.getSignatureStatuses = async () => { throw new Error('timeout'); };
   const pending = await runTransaction(f.connection, f.signer.publicKey, [f.ix], f.sign, f.emit, f.persist);
   f.connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [{ slot: 1, confirmations: 1, err: null, confirmationStatus: 'confirmed' }] });
   const recovered = await checkTransaction(f.connection, pending);
@@ -122,6 +124,51 @@ test('an absent signature remains blocked until its blockhash expires', async ()
   assert.equal((await checkTransaction(f.connection, pending)).phase, 'unknown');
   f.connection.getBlockHeight = async () => 101;
   assert.equal((await checkTransaction(f.connection, pending)).phase, 'failed');
+});
+
+test('HTTP confirmation waits for commitment and has a bounded deadline without WebSockets', async () => {
+  const f = fixture(); let calls = 0; let clock = 0;
+  f.connection.confirmTransaction = async () => { throw new Error('WebSocket confirmation must not run'); };
+  f.connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [{ slot: 1, confirmations: calls++ ? 1 : 0, err: null, confirmationStatus: calls > 1 ? 'confirmed' : 'processed' }] });
+  const result = await confirmSignedTransaction(f.connection, 'test', 100, { now: () => clock, sleep: async ms => { clock += ms; } });
+  assert.equal(result.value.err, null); assert.equal(calls, 2);
+  f.connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [null] });
+  await assert.rejects(confirmSignedTransaction(f.connection, 'test', 100, { now: () => clock, sleep: async ms => { clock += ms; }, timeoutMs: 3000 }), /timed out/);
+});
+
+test('a processed fork error cannot unlock another send before it is confirmed', async () => {
+  const f = fixture(); const pending: TransactionState = { phase: 'unknown', signature: 'test', lastValidBlockHeight: 100 };
+  f.connection.getSignatureStatuses = async () => ({ context: { slot: 1 }, value: [{ slot: 1, confirmations: 0, err: { InstructionError: [0, { Custom: 6000 }] }, confirmationStatus: 'processed' }] });
+  f.connection.getBlockHeight = async () => 101;
+  assert.equal((await checkTransaction(f.connection, pending)).phase, 'unknown');
+});
+
+test('unreadable secure transaction state fails closed instead of being treated as no pending transaction', async () => {
+  for (const raw of ['not-json', '{}', 'null', '{"phase":"unknown","signature":"broken"}']) {
+    await assert.rejects(restorePendingTransaction({ getItemAsync: async () => raw, setItemAsync: async () => {} }));
+  }
+  await assert.rejects(restorePendingTransaction({ getItemAsync: async () => { throw new Error('storage unavailable'); }, setItemAsync: async () => {} }), /storage unavailable/);
+});
+
+test('relay failures fall back for reads, but never resend a transaction after an ambiguous submit', async () => {
+  const calls: string[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    calls.push(`${String(input)}:${JSON.parse(String(init?.body)).method}`);
+    if (String(input).includes('relay')) throw new Error('Relay connection lost');
+    return new Response('{"jsonrpc":"2.0","id":1,"result":true}');
+  };
+  const reads = createRpcFetch(true, fetcher);
+  await reads('https://relay.example', { body: JSON.stringify({ method: 'getGenesisHash' }) });
+  assert.deepEqual(calls, ['https://relay.example:getGenesisHash', 'https://api.devnet.solana.com:getGenesisHash']);
+  calls.length = 0;
+  const sends = createRpcFetch(true, fetcher);
+  await assert.rejects(sends('https://relay.example', { body: JSON.stringify({ method: 'sendTransaction' }) }), /lost/);
+  assert.deepEqual(calls, ['https://relay.example:sendTransaction']);
+  await sends('https://relay.example', { body: JSON.stringify({ method: 'getSignatureStatuses' }) });
+  assert.equal(calls.at(-1), 'https://api.devnet.solana.com:getSignatureStatuses');
+  calls.length = 0;
+  await assert.rejects(createRpcFetch(false, fetcher)('https://relay.example', { body: JSON.stringify({ method: 'getGenesisHash' }) }));
+  assert.equal(calls.length, 1);
 });
 
 test('token parsing never rounds or silently accepts more precision than the mint', () => {

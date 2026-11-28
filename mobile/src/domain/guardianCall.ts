@@ -8,7 +8,7 @@ export type CallLine = { who: 'argus' | 'owner'; text: string };
 export type CallRelay = { status: 'connected' | 'ended' } | CallLine;
 export type GuardianCallRequest = {
   id: string; ownerName: string; vaultName: string; amount: string; destination: string; reason: string;
-  expiresAt: number; demo: boolean;
+  expiresAt: number; demo: boolean; canAllow?: boolean; autoActAt?: number;
 };
 
 export function voiceVariables(request: GuardianCallRequest) {

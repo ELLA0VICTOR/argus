@@ -1,6 +1,7 @@
 import { getMint, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { PublicKey } from '@solana/web3.js';
 import { Buffer } from 'buffer';
+import bs58 from 'bs58';
 import { ArgusClient, ARGUS_PROGRAM_ID, type RecordAt, type Withdrawal, type Proposal, type TrustedAddress } from './client.ts';
 import { requireDevnet } from './transactions.ts';
 
@@ -34,8 +35,10 @@ export type VaultView = Awaited<ReturnType<typeof readVault>>;
 
 export async function readWalletVaults(client: ArgusClient, wallet: PublicKey) {
   await requireDevnet(client.connection);
-  const accounts = await client.connection.getProgramAccounts(ARGUS_PROGRAM_ID, { commitment: 'confirmed' });
   const schema = client.program.idl.accounts!.find(a => a.name === 'vault')!;
+  const accounts = await client.connection.getProgramAccounts(ARGUS_PROGRAM_ID, { commitment: 'confirmed',
+    filters: [{ memcmp: { offset: 0, bytes: bs58.encode(Uint8Array.from(schema.discriminator)) } }],
+  });
   return accounts.filter(({ account }) => account.data.subarray(0, schema.discriminator.length).equals(Buffer.from(schema.discriminator)))
     .map(({ pubkey, account }) => client.decodeVault(pubkey, account))
     .filter(({ data }) => data.owner.equals(wallet) || data.aiGuardian.equals(wallet) || data.guardians.slice(0, data.guardianCount).some(g => g.equals(wallet)));

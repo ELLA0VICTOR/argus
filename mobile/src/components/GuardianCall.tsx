@@ -95,7 +95,8 @@ export function GuardianCall({ request, submit, relay, outcome, onClose }: {
   const finished = phase === 'resolved' || phase === 'expired';
   return <Modal visible presentationStyle="fullScreen" animationType="none" onRequestClose={() => { if (finished) onClose(); else useButtons(); }}>
     {NativeVoice && voice.current && <NativeVoice attempt={voice.current} request={request} callbacks={{
-      cancel: () => decide('cancel', 'voice'), allow: () => decide('allow', 'voice'),
+      cancel: () => decide('cancel', 'voice'), allow: () => request.canAllow === false
+        ? Promise.reject(new Error('A guardian must confirm this critical alert. The owner key cannot stand Argus down.')) : decide('allow', 'voice'),
       connected: () => { clearTimeout(connectionTimer.current); setPhase('live'); if (!relayedConnected.current) { relayedConnected.current = true; relayLine({ status: 'connected' }); } },
       disconnected: () => { stopVoice(); setPhase('fallback'); }, mode: setSpeaking,
       line: line => { setLines(previous => [...previous, line].slice(-80)); relayLine(line); },
@@ -109,7 +110,7 @@ export function GuardianCall({ request, submit, relay, outcome, onClose }: {
       </View>
       <Panel><Copy style={common.amount}>{request.amount}</Copy><Copy style={common.muted}>{request.reason}</Copy>
         <Label>Destination wallet</Label><Copy selectable style={[common.mono, { fontSize: 12 }]}>{request.destination}</Copy>
-        {!finished && <Copy style={[common.num, { color: c.wait }]}>{request.demo ? `${Math.max(0, Math.ceil((request.expiresAt - now) / 1000))}s to respond` : `Withdrawal delay remaining: ${countdown(request.expiresAt, now)}`}</Copy>}
+        {!finished && <Copy style={[common.num, { color: c.wait }]}>{request.demo ? `${Math.max(0, Math.ceil((request.expiresAt - now) / 1000))}s to respond` : request.autoActAt ? `Argus acts in ${Math.max(0, Math.ceil((request.autoActAt - now) / 1000))}s` : `Withdrawal delay remaining: ${countdown(request.expiresAt, now)}`}</Copy>}
       </Panel>
       {result && <Copy accessibilityRole="alert" style={common.muted}>{result}</Copy>}
       {phase === 'expired' && <Copy accessibilityRole="alert" style={common.muted}>The response window ended. Check the withdrawal’s status. Closing this screen does not confirm cancellation.</Copy>}
@@ -117,7 +118,8 @@ export function GuardianCall({ request, submit, relay, outcome, onClose }: {
       {phase === 'ringing' && <Button title="Accept" onPress={() => { void accept(); }} disabled={deciding} />}
       {!finished && <>
         <Button title={phase === 'ringing' ? 'Decline · Cancel withdrawal' : 'Cancel withdrawal'} tone="threat" busy={deciding} busyTitle="Sending your answer…" onPress={() => { void decide('cancel', 'button').catch(() => {}); }} />
-        {phase !== 'ringing' && <Button title="Yes, this was me" tone="secondary" disabled={deciding} onPress={() => Alert.alert('Was this your withdrawal?', 'This preserves the original withdrawal delay. It does not send funds now.', [{ text: 'Go back', style: 'cancel' }, { text: 'Confirm it was me', onPress: () => { void decide('allow', 'button').catch(() => {}); } }])} />}
+        {phase !== 'ringing' && request.canAllow !== false && <Button title="Yes, this was me" tone="secondary" disabled={deciding} onPress={() => Alert.alert('Was this your withdrawal?', 'This preserves the original withdrawal delay. It does not send funds now.', [{ text: 'Go back', style: 'cancel' }, { text: 'Confirm it was me', onPress: () => { void decide('allow', 'button').catch(() => {}); } }])} />}
+        {request.canAllow === false && <Copy style={common.muted}>This looks like theft. A guardian must confirm it was you; the owner key alone cannot stand Argus down.</Copy>}
         {phase === 'live' && <Button title={muted ? 'Unmute microphone' : 'Mute microphone'} tone="quiet" onPress={() => { voice.current?.mute(!muted); setMuted(!muted); }} />}
         {['ringing', 'connecting', 'live'].includes(phase) && <Button title="Use decision buttons instead" tone="quiet" onPress={useButtons} />}
         <Copy style={[common.muted, { fontSize: 12 }]}>{request.demo ? 'If nobody answers, Sentinel takes its protective action. Check the live log for confirmation.' : 'Cancel opens your wallet for an MWA signature. Argus cannot move your funds. Confirming it was you only dismisses the alert.'}</Copy>

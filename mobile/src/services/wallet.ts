@@ -6,7 +6,7 @@ import type { Challenge } from '../sentinel/types';
 import { signatureFromSignedPayload } from '../sentinel/rules';
 
 export type WalletSession = { address: string; authToken: string };
-const walletIdentity = { name: 'Argus', uri: 'https://tryargus.vercel.app' };
+const walletIdentity = { name: 'Argus', uri: 'https://tryargus.vercel.app', icon: 'favicon.svg' };
 
 export async function connectWallet(): Promise<WalletSession> {
   if (Platform.OS !== 'android') throw new Error('Wallet connection requires an Android development build.');
@@ -35,6 +35,21 @@ export async function signSentinelChallenge(session: WalletSession, challenge: C
     const payloads = await wallet.signMessages({ addresses: [account.address], payloads: [message] });
     if (payloads.length !== 1) throw new Error('The wallet did not return the requested sign-in signature.');
     return signatureFromSignedPayload(payloads[0], message, session.address);
+  });
+}
+
+/** Sign only the caller's exact displayable message; return the signature+message for local verification. */
+export async function signWalletMessage(session: WalletSession, message: Uint8Array): Promise<Uint8Array> {
+  if (Platform.OS !== 'android') throw new Error('Message signing requires Android.');
+  return transact(async wallet => {
+    const authorization = await wallet.authorize({ chain: 'solana:devnet', identity: walletIdentity, auth_token: session.authToken });
+    session.authToken = authorization.auth_token;
+    const account = authorization.accounts.find(a => new PublicKey(Buffer.from(a.address, 'base64')).toBase58() === session.address);
+    if (!account) throw new Error('The wallet account changed. Reconnect before signing.');
+    const result = await wallet.signMessages({ addresses: [account.address], payloads: [message] });
+    if (result.length !== 1) throw new Error('The wallet did not return the requested signature.');
+    signatureFromSignedPayload(result[0], message, session.address);
+    return result[0];
   });
 }
 

@@ -2,26 +2,35 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'rea
 import { Alert, AppState, BackHandler, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PublicKey, type TransactionInstruction } from '@solana/web3.js';
-import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, getMint, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { createAssociatedTokenAccountIdempotentInstruction, getAssociatedTokenAddressSync, getAccount, getMint, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { Button, Copy, Field, Label, Panel, common } from '../components/ui';
 import { AppHeader, AppTabBar, type AppTab } from '../components/AppChrome';
 import { VaultPreview } from './VaultPreview';
 import { FreezeButton } from '../components/FreezeButton';
+import { GuardianCall } from '../components/GuardianCall';
+import { SignalIcon } from '../components/SignalIcon';
+import { ProposalComposer } from '../components/ProposalComposer';
 import { TransactionNotice } from '../components/TransactionNotice';
 import { ActivityTimeline, AllowanceMeter, KeyAvatar, RouteIndicator, WaitProgress } from '../components/VaultPatterns';
 import { allowanceFraction, allowanceRemaining, delayLabel, sendRoute } from '../domain/vaultMetrics';
-import { connectWallet, disconnectWallet, signWalletTransaction, type WalletSession } from '../services/wallet';
+import { connectWallet, disconnectWallet, signWalletMessage, signWalletTransaction, type WalletSession } from '../services/wallet';
 import { programClient as client, connection } from '../program/runtime';
 import { readVault, readWalletVaults, type VaultView } from '../program/read';
 import { integer, type GovAction, type RecordAt, type Proposal, type Withdrawal } from '../program/client';
 import { checkTransaction, parseAmount, restorePendingTransaction, runTransaction, saveTransaction, transactionBusy, type TransactionState } from '../program/transactions';
-import { formatUnits } from '../sentinel/rules';
+import { formatTokenAmount, formatUnits } from '../sentinel/rules';
 import { countdown } from '../domain/demo';
 import { colors as c, fonts as f } from '../theme';
 import { userMessage } from '../domain/userMessage';
 import { formatTypedAmount } from '../domain/amountInput';
 import * as SecureStore from 'expo-secure-store';
 import { DEMO_MINT, SENTINEL_AI_GUARDIAN } from '../sentinel/demo';
+import { liveSentinel } from '../sentinel/liveRuntime';
+import type { LiveAlert } from '../sentinel/live';
+import { useLiveProtection } from '../services/useLiveProtection';
+import { boundWithdrawal, canDismissLiveAlert, liveAlertReason } from '../domain/liveProtection';
+import type { GuardianCallRequest } from '../domain/guardianCall';
+import { loadHistory, type HistoryEntry } from '../program/history';
 
 const key = (value: string) => {
   try { return new PublicKey(value.trim()); }
@@ -29,14 +38,17 @@ const key = (value: string) => {
 };
 const numberId = (value: { toString(): string }) => BigInt(value.toString());
 
-export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolean; onLiveDemo: () => void; onBusy: (busy: boolean) => void }) {
+export function LiveApp({ active = true, incomingAlertId, onIncomingHandled, onLiveDemo, onBusy }: { active?: boolean; incomingAlertId?: string | null; onIncomingHandled?: () => void; onLiveDemo: () => void; onBusy: (busy: boolean) => void }) {
   const [wallet, setWallet] = useState<WalletSession | null>(null);
   const [address, setAddress] = useState('');
   const [vaultChoices, setVaultChoices] = useState<string[]>([]);
+  const [discoveryUnavailable, setDiscoveryUnavailable] = useState(false);
   const [view, setView] = useState<VaultView | null>(null);
   const [tab, setTab] = useState<AppTab>('Home');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [storageReady, setStorageReady] = useState(false);
+  const [incomingAttempt, setIncomingAttempt] = useState(0);
   const [tx, setTx] = useState<TransactionState>({ phase: 'idle' });
   const [now, setNow] = useState(Date.now());
   const [creating, setCreating] = useState(false);
@@ -54,17 +66,25 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
   const [vaultName, setVaultName] = useState('Savings');
   const [displayName, setDisplayName] = useState('Your');
   const [advanced, setAdvanced] = useState(false);
-  const [proposalWallet, setProposalWallet] = useState('');
-  const [action, setAction] = useState<'unfreeze' | 'addTrusted' | 'removeTrusted' | 'rotateOwner'>('unfreeze');
+  const [faucetBusy, setFaucetBusy] = useState(false);
+  const [faucetSignature, setFaucetSignature] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<string | null>(null);
+  const [events, setEvents] = useState<{ vault: string; entries: HistoryEntry[] } | null>(null);
+  const [call, setCall] = useState<{ alert: LiveAlert; request: GuardianCallRequest } | null>(null);
+  const seenCalls = useRef(new Set<string>());
+  const protection = useLiveProtection(view?.vault.address.toBase58(), active);
   const lock = useRef(false);
   const current = useRef('');
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [tab, !!view, creating]);
-  const busy = loading || transactionBusy(tx);
-  useEffect(() => { if (active) onBusy(transactionBusy(tx)); }, [active, tx.phase, onBusy]);
-  useEffect(() => { void restorePendingTransaction(SecureStore).then(pending => {
-    if (pending) setTx(pending);
-  }).catch(() => setError('Could not restore transaction status. Check recent wallet activity before sending again.')); }, []);
+  const busy = !storageReady || loading || transactionBusy(tx) || faucetBusy || !!call;
+  useEffect(() => { if (active) onBusy(!storageReady || transactionBusy(tx) || !!call); }, [active, storageReady, tx.phase, call, onBusy]);
+  const restoreStatus = useCallback(async () => {
+    setStorageReady(false);
+    try { const pending = await restorePendingTransaction(SecureStore); if (pending) setTx(pending); setStorageReady(true); setError(null); }
+    catch { setError('Could not restore transaction status. Sending is paused until this check succeeds.'); }
+  }, []);
+  useEffect(() => { void restoreStatus(); }, [restoreStatus]);
 
   const refresh = useCallback(async (selected = current.current) => {
     if (!selected) return;
@@ -79,6 +99,18 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
 
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
   useEffect(() => { const sub = AppState.addEventListener('change', state => { if (active && state === 'active' && !lock.current) void refresh(); }); return () => sub.remove(); }, [active, refresh]);
+  useEffect(() => {
+    if (!active || !view || incomingAlertId) return;
+    const timer = setInterval(() => { if (AppState.currentState === 'active' && !lock.current) void refresh(); }, 12_000);
+    return () => clearInterval(timer);
+  }, [active, !!view, incomingAlertId, refresh]);
+  useEffect(() => {
+    if (!wallet || !active) { setWalletBalance(null); return; }
+    let alive = true;
+    const ata = getAssociatedTokenAddressSync(view?.vault.data.mint ?? key(DEMO_MINT), key(wallet.address));
+    void connection.getTokenAccountBalance(ata, 'confirmed').then(result => { if (alive) setWalletBalance(result.value.amount); }).catch(() => { if (alive) setWalletBalance(null); });
+    return () => { alive = false; };
+  }, [active, wallet?.address, view, faucetSignature]);
   useEffect(() => { if (!active) return; const sub = BackHandler.addEventListener('hardwareBackPress', () => {
     if (busy) return true;
     if (creating) { setCreating(false); return true; }
@@ -87,18 +119,27 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
     return false;
   }); return () => sub.remove(); }, [active, view, tab, busy, creating]);
 
+  async function discover(session: WalletSession) {
+    setDiscoveryUnavailable(false);
+    try {
+      const choices = (await readWalletVaults(client, key(session.address))).map(v => v.address.toBase58());
+      setVaultChoices(choices);
+      if (choices.length) { setCreating(false); current.current = choices[0]; setAddress(choices[0]); await refresh(choices[0]); }
+      else setCreating(true);
+    } catch (e) {
+      // A failed lookup is not evidence of an empty wallet. Setup remains available;
+      // the user can explicitly retry discovery without a misleading global error.
+      console.info('Vault discovery unavailable', e instanceof Error ? e.message : 'Unknown lookup failure');
+      setDiscoveryUnavailable(true);
+    }
+  }
   async function connect() {
     if (lock.current) return;
     lock.current = true; setLoading(true); setError(null);
     try {
       const session = await connectWallet(); setWallet(session);
-      try {
-        const choices = (await readWalletVaults(client, key(session.address))).map(v => v.address.toBase58());
-        setVaultChoices(choices);
-        if (choices.length) { current.current = choices[0]; setAddress(choices[0]); await refresh(choices[0]); }
-        else setCreating(true);
-      }
-      catch { setError("Couldn't reach devnet to look for your vault. Try again."); }
+      current.current = ''; setView(null); setAddress(''); setVaultChoices([]); setCreating(true);
+      await discover(session);
     }
     catch (e) { console.info('Wallet connection failed', e); setError('Could not connect your wallet. Open your Solana wallet and try again.'); }
     finally { lock.current = false; setLoading(false); }
@@ -110,7 +151,7 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
   }
 
   async function perform(build: (signer: PublicKey) => Promise<TransactionInstruction[]>) {
-    if (lock.current || transactionBusy(tx) || !wallet) return;
+    if (!storageReady || lock.current || transactionBusy(tx) || !wallet) return;
     lock.current = true; setError(null); setTx({ phase: 'preparing' });
     try {
       const instructions = await build(key(wallet.address));
@@ -120,7 +161,9 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
       await saveTransaction(SecureStore, result)
         .catch(() => setError('Transaction status could not be saved. Keep its Explorer link; the on-chain result above still applies.'));
       if (result.phase === 'confirmed') await refresh();
-    } catch (e) { console.info('Could not prepare transaction', e); setTx({ phase: 'failed', message: userMessage(e, 'Could not prepare this action. Refresh and retry.') }); }
+      await protection.refresh();
+      return result;
+    } catch (e) { console.info('Could not prepare transaction', e); const failed: TransactionState = { phase: 'failed', message: userMessage(e, 'Could not prepare this action. Refresh and retry.') }; setTx(failed); return failed; }
     finally { lock.current = false; }
   }
   function confirm(title: string, body: string, build: (signer: PublicKey) => Promise<TransactionInstruction[]>) {
@@ -131,6 +174,7 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
   const guardianIndex = wallet && v ? v.data.guardians.slice(0, v.data.guardianCount).findIndex(g => g.toBase58() === wallet.address) : -1;
   const owner = !!wallet && v?.data.owner.toBase58() === wallet.address;
   const protective = owner || guardianIndex >= 0 || (!!wallet && v?.data.aiGuardian.toBase58() === wallet.address);
+  const role = owner ? 'owner' : guardianIndex >= 0 ? 'guardian' : null;
   const symbol = v?.data.mint.toBase58() === DEMO_MINT ? 'dUSDC' : 'tokens';
   const units = (value: string) => `${formatUnits(value, view?.decimals ?? 0)} ${symbol}`;
   const remaining = v ? allowanceRemaining(numberId(v.data.dailyLimit), numberId(v.data.spentInWindow), numberId(v.data.windowStart), BigInt(Math.floor(now / 1000))) : 0n;
@@ -144,6 +188,67 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
     : view && parsedAmount > BigInt(view.balance) ? "That's more than the vault holds."
     : destination.trim() === v?.address.toBase58() ? "You can't send the vault to itself."
     : destination && !validDestination ? "That doesn't look like a Solana address." : null;
+
+  useEffect(() => {
+    if (!active || !view?.history) return;
+    let alive = true;
+    void loadHistory(client, view.vault.address, view.history, view.decimals, symbol).then(entries => {
+      if (alive) setEvents({ vault: view.vault.address.toBase58(), entries });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [active, view, symbol]);
+
+  useEffect(() => {
+    if (!active || !wallet || !view || !role || call || transactionBusy(tx) || protection.error) return;
+    const alert = protection.alerts.find(a => a.risk === 'critical' && !seenCalls.current.has(a.id) && boundWithdrawal(view, a) && (a.act_at === null || a.act_at > Date.now()));
+    if (!alert) return;
+    const w = boundWithdrawal(view, alert)!; let alive = true;
+    void getAccount(connection, w.data.destination, 'confirmed', TOKEN_PROGRAM_ID).then(token => {
+      if (!alive || !token.mint.equals(view.vault.data.mint)) return;
+      seenCalls.current.add(alert.id);
+      if (incomingAlertId === alert.id) onIncomingHandled?.();
+      setCall({ alert, request: { id: `live:${alert.id}`, ownerName: 'there', vaultName: `${displayName} vault`,
+        amount: formatTokenAmount(w.data.amount.toString(), { mint: token.mint.toBase58(), symbol: token.mint.toBase58() === DEMO_MINT ? 'dUSDC' : null, decimals: view.decimals }),
+        destination: token.owner.toBase58(), reason: liveAlertReason(view, alert), expiresAt: Math.min(Number(w.data.executesAt.toString()) * 1000, alert.act_at ?? Infinity),
+        demo: false, canAllow: canDismissLiveAlert(alert, role), ...(alert.act_at ? { autoActAt: alert.act_at } : {}) } });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [active, wallet?.address, view, role, call, tx.phase, protection.alerts, protection.error, displayName, incomingAlertId, onIncomingHandled]);
+
+  useEffect(() => {
+    if (!incomingAlertId || !wallet || !active || call || loading || faucetBusy || !storageReady || transactionBusy(tx)) return;
+    let alive = true;
+    void (async () => {
+      for (const selected of [...new Set([current.current, ...vaultChoices].filter(Boolean))].slice(0, 20)) {
+        const alerts = await liveSentinel.alerts(selected, true);
+        if (!alive) return;
+        const matched = alerts.find(a => a.id === incomingAlertId);
+        if (matched) {
+          if (lock.current) return;
+          seenCalls.current.delete(incomingAlertId); setView(null); current.current = selected; setAddress(selected);
+          setTab(matched.status === 'open' ? 'Home' : 'Activity'); onIncomingHandled?.(); await refresh(selected);
+          return;
+        }
+      }
+      if (alive) { setError('This alert is no longer open in your vaults. Check recent activity.'); onIncomingHandled?.(); }
+    })().catch(() => { if (alive) setError('Could not open this alert. Reconnect and try again.'); });
+    return () => { alive = false; };
+  }, [incomingAlertId, incomingAttempt, active, wallet?.address, vaultChoices, call, tx.phase, loading, faucetBusy, storageReady, refresh, onIncomingHandled]);
+
+  async function claimTestTokens() {
+    if (!storageReady || !wallet || lock.current || transactionBusy(tx)) return;
+    lock.current = true; setFaucetBusy(true); setError(null);
+    try { const result = await liveSentinel.faucet(wallet.address); setFaucetSignature(result.sig); if (current.current) await refresh(); }
+    catch (e) { setError(userMessage(e, 'Could not get test tokens. Check your wallet before trying again.')); }
+    finally { lock.current = false; setFaucetBusy(false); }
+  }
+  async function dismissLive(alert: LiveAlert) {
+    if (!wallet || !view || !boundWithdrawal(view, alert) || !canDismissLiveAlert(alert, role)) throw new Error('A guardian must confirm this critical alert.');
+    if (!storageReady || lock.current || transactionBusy(tx)) throw new Error('Finish the current wallet request first.');
+    lock.current = true; setLoading(true);
+    try { await liveSentinel.dismiss(view.vault.address.toBase58(), alert.id, wallet.address, message => signWalletMessage(wallet, message), Date.now(), candidate => candidate.withdrawal?.pda === alert.withdrawal?.pda && !!boundWithdrawal(view, candidate)); await protection.refresh(); }
+    finally { lock.current = false; setLoading(false); }
+  }
   function freeze() {
     if (!v) return;
     confirm('Pause outgoing transfers?', 'Any owner or guardian can freeze. Unfreezing needs guardian approval.', async signer => {
@@ -170,9 +275,12 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
 
   let content;
   if (!v || !view) content = <View style={common.stack}>
+    {incomingAlertId && !wallet && <Copy style={common.muted}>Connect your wallet to review the alert from your notification.</Copy>}
+    {wallet && <View style={{ alignItems: 'flex-start', gap: 8 }}><Button title="Get 1,000 test dUSDC" size="small" tone="secondary" busy={faucetBusy} disabled={busy && !faucetBusy} onPress={() => { void claimTestTokens(); }} />
+      {faucetSignature && <Copy style={common.muted}>Test tokens sent. Your wallet also gets a little SOL for fees if needed.</Copy>}</View>}
     {!wallet ? <VaultPreview tab={tab} onTab={setTab} onConnect={() => { void connect(); }} onDemo={onLiveDemo} busy={busy} />
       : <Panel><Copy style={common.title}>{creating ? 'Set up your vault' : 'Your vaults'}</Copy>
-        {!creating ? <>{vaultChoices.map(selected => <View key={selected} style={{ gap: 8 }}><Copy selectable style={common.mono}>{selected}</Copy><Button title="Open this vault" tone="secondary" disabled={busy} onPress={() => { current.current = selected; setAddress(selected); void refresh(selected); }} /></View>)}
+        {!creating ? <>{vaultChoices.map(selected => <View key={selected} style={{ gap: 8 }}><Copy selectable style={common.mono}>{selected}</Copy><Button title="Open this vault" tone="secondary" disabled={busy} onPress={() => { setView(null); current.current = selected; setAddress(selected); void refresh(selected); }} /></View>)}
           <Field label="Vault address" value={address} onChangeText={setAddress} autoCapitalize="none" autoCorrect={false} placeholder="Paste a vault account address" />
           <Button title="Open vault" busy={loading} disabled={!address.trim()} onPress={() => { void open(); }} />
           <Button title="Create a new vault" tone="quiet" disabled={busy} onPress={() => setCreating(true)} /></>
@@ -207,6 +315,11 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
               current.current = selected; setAddress(selected); return [ix];
             })} />
             <Copy style={[common.muted, { fontSize: 12 }]}>One signature. It costs a little devnet SOL for rent and fees.</Copy>
+            {discoveryUnavailable && <Button title="Check for existing vaults" tone="quiet" disabled={busy} onPress={() => {
+              if (!wallet || lock.current) return;
+              lock.current = true; setLoading(true);
+              void discover(wallet).finally(() => { lock.current = false; setLoading(false); });
+            }} />}
             <Button title="Back to your vaults" tone="quiet" disabled={busy} onPress={() => setCreating(false)} /></>}
       </Panel>}
     {txNotice}
@@ -226,20 +339,38 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
         <Copy style={[common.muted, { fontSize: 13 }]}>Larger amounts wait {delayLabel(numberId(v.data.delaySeconds))} and can be cancelled.</Copy></>}
         {owner && <View style={common.row}><View style={{ flex: 1 }}><Button title="Send" disabled={v.data.frozen || busy} onPress={() => setTab('Send')} /></View><View style={{ flex: 1 }}><Button title="Deposit" tone="secondary" disabled={busy} onPress={() => setDepositing(!depositing)} /></View></View>}
         {depositing && <View style={{ gap: 16 }}><Copy style={common.muted}>Move test {symbol} from your wallet into the vault.</Copy>
-        <Field label="Amount to deposit" value={depositAmount} onChangeText={setDepositAmount} keyboardType="decimal-pad" placeholder="0.00" editable={!busy} />
+        <Copy style={common.muted}>In your wallet: {walletBalance === null ? '—' : units(walletBalance)}</Copy>
+        {v.data.mint.toBase58() === DEMO_MINT && <Button title="Get 1,000 test dUSDC" size="small" tone="secondary" busy={faucetBusy} disabled={busy && !faucetBusy} onPress={() => { void claimTestTokens(); }} />}
+        <Field label="Amount" value={depositAmount} onChangeText={value => setDepositAmount(formatTypedAmount(value))} keyboardType="decimal-pad" placeholder="0.00" editable={!busy} />
         <Button title="Deposit" tone="secondary" disabled={busy || !wallet || !depositAmount.trim()} onPress={() => confirm('Deposit into this vault?', `${depositAmount} ${symbol} will move from your wallet to this vault.`, async signer => {
           const latest = await fresh(); const from = getAssociatedTokenAddressSync(latest.data.mint, signer);
-          return [await client.deposit(latest, signer, from, parseAmount(depositAmount, view.decimals))];
+          return [await client.deposit(latest, signer, from, parseAmount(depositAmount.replace(/,/g, ''), view.decimals))];
         })} /></View>}
         <FreezeButton disabled={!protective || busy} frozen={v.data.frozen} onPress={freeze} />
       </Panel>
+      {protection.error && <Copy style={[common.muted, { fontSize: 13 }]}>{protection.error}</Copy>}
+      {protection.alerts.some(a => ['high', 'critical'].includes(a.risk) && boundWithdrawal(view, a)) && <View style={{ gap: 12 }}><Copy style={s.section}>Needs your attention</Copy>
+        {protection.alerts.filter(a => ['high', 'critical'].includes(a.risk) && boundWithdrawal(view, a)).map(alert => {
+          const w = boundWithdrawal(view, alert)!;
+          return <Panel key={alert.id} style={{ borderLeftColor: c.threat, borderLeftWidth: 3 }}>
+            <Copy style={[common.muted, { fontSize: 13 }]}>{alert.act_at ? alert.act_at > now ? `Looks like theft. Argus cancels it in ${Math.max(0, Math.ceil((alert.act_at - now) / 1000))}s unless a guardian confirms it.` : 'Looks like theft. Argus is cancelling it.' : 'This withdrawal looks suspicious.'}</Copy>
+            <Copy style={[common.amount, { fontSize: 24 }]}>{units(w.data.amount.toString())}</Copy><Copy style={common.muted}>{userMessage(liveAlertReason(view, alert), 'Argus flagged this withdrawal.')}</Copy>
+            {alert.signals.map(signal => <View key={signal.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><SignalIcon id={signal.id} threat={false} /><Copy style={[common.muted, { flex: 1, fontSize: 13 }]}>{signal.label}</Copy></View>)}
+            <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
+            <View style={common.row}><View style={{ flex: 1 }}><Button title="Cancel" tone="threat" disabled={!protective || busy} onPress={() => cancel(w)} /></View>
+              {canDismissLiveAlert(alert, role) && <View style={{ flex: 1 }}><Button title="It was me" tone="secondary" disabled={busy} onPress={() => Alert.alert('Was this your withdrawal?', 'This stops Argus acting on this alert. The original withdrawal delay still applies.', [{ text: 'Go back', style: 'cancel' }, { text: 'Confirm it was me', onPress: () => { void dismissLive(alert).catch(e => setError(userMessage(e, 'Could not confirm this alert. Try again.'))); } }])} /></View>}
+            </View>
+            {alert.risk === 'critical' && role === 'owner' && <Copy style={[common.muted, { fontSize: 13 }]}>A guardian must confirm it was you. The owner key alone cannot stand Argus down.</Copy>}
+          </Panel>;
+        })}
+      </View>}
       <View style={{ gap: 12 }}><Copy style={s.section}>Waiting to leave</Copy><Panel>{view.withdrawals.length === 0 ? <Copy style={common.muted}>No pending withdrawals.</Copy> : view.withdrawals.slice(0, 3).map((w, i) => <View key={w.address.toBase58()} style={[i > 0 && common.divider, { gap: 12 }]}>
         <Copy style={common.num}>{units(w.data.amount.toString())}</Copy><Copy style={common.muted}>Request {w.data.id.toString()}</Copy>
         <Copy style={[common.mono, { color: c.muted, fontSize: 12 }]}>to {w.data.destination.toBase58().slice(0, 4)}…{w.data.destination.toBase58().slice(-4)}</Copy>
         <WaitProgress requestedAt={Number(w.data.requestedAt.toString()) * 1000} executesAt={Number(w.data.executesAt.toString()) * 1000} now={now} />
         <View style={{ alignSelf: 'flex-start' }}><Button title="Cancel" tone="secondary" disabled={!protective || busy} onPress={() => cancel(w)} /></View>
       </View>)}{view.withdrawals.length > 0 && <Button title="View all" tone="quiet" onPress={() => setTab('Activity')} />}</Panel></View>
-      <VaultActivity history={view.history} limit={4} />
+      <VaultActivity history={view.history} events={events?.vault === v.address.toBase58() ? events.entries : undefined} limit={5} />
       <Pressable accessibilityRole="button" onPress={onLiveDemo} disabled={busy} style={{ alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center' }}><Copy style={{ color: c.brand, fontFamily: f.medium }}>Try live demo →</Copy></Pressable>
     </>}
     {tab === 'Send' && <>
@@ -276,7 +407,8 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
         })} />
       </Panel>)}
       <FreezeButton disabled={!protective || busy} frozen={v.data.frozen} onPress={freeze} />
-      <VaultActivity history={view.history} />
+      <VaultActivity history={view.history} events={events?.vault === v.address.toBase58() ? events.entries : undefined} />
+      {protection.log.length > 0 && <View style={{ gap: 12 }}><Copy style={s.section}>Argus watch log</Copy><Panel><ActivityTimeline entries={protection.log.map((entry, i) => ({ id: `${entry.at}:${i}`, title: userMessage(entry.text, 'Argus checked your vault.'), detail: new Date(entry.at * 1000).toLocaleString(), done: ['ai_cancel', 'ai_freeze', 'dismissed'].includes(entry.type) }))} /></Panel></View>}
     </>}
     {tab === 'Guardians' && <>
       <Copy style={s.section}>Who's protecting this vault</Copy><Panel>{v.data.guardians.slice(0, v.data.guardianCount).map((g, i) => <View key={g.toBase58()} style={common.row}><KeyAvatar label={`Guardian ${i + 1}`} /><View style={{ flex: 1, gap: 4 }}><Copy>Guardian {i + 1}</Copy><Copy selectable style={[common.mono, { fontSize: 12 }]}>{g.toBase58()}</Copy></View></View>)}
@@ -306,14 +438,10 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
           </>}
         </Panel>;
       })}
-      {guardianIndex >= 0 && <Panel><Label>Propose a change</Label>
-        {(['unfreeze', 'addTrusted', 'removeTrusted', 'rotateOwner'] as const).map(value => <Button key={value} title={{ unfreeze: 'Unfreeze vault', addTrusted: 'Add a trusted wallet', removeTrusted: 'Remove a trusted wallet', rotateOwner: 'Replace owner wallet' }[value]} tone={value === action ? 'secondary' : 'quiet'} disabled={busy} onPress={() => setAction(value)} />)}
-        {action !== 'unfreeze' && <Field label="Wallet address for this change" value={proposalWallet} onChangeText={setProposalWallet} autoCapitalize="none" autoCorrect={false} />}
-        <Button title="Review proposal" disabled={busy} onPress={() => confirm('Propose this change?', action === 'unfreeze' ? 'Unfreezing requires your guardian threshold.' : `Check the target wallet: ${proposalWallet}. Other guardians must approve.`, async signer => {
-          const latest = await fresh(); const change: GovAction = action === 'unfreeze' ? { unfreeze: {} } : action === 'addTrusted' ? { addTrusted: { wallet: key(proposalWallet) } } : action === 'removeTrusted' ? { removeTrusted: { wallet: key(proposalWallet) } } : { rotateOwner: { newOwner: key(proposalWallet) } };
-          return [await client.propose(latest, signer, change)];
-        })} />
-      </Panel>}
+      {guardianIndex >= 0 && <ProposalComposer vault={v} decimals={view.decimals} disabled={busy} onPropose={build => {
+        try { const action = build(); confirm('Propose this change?', proposalDescription(action, view.decimals), async signer => [await client.propose(await fresh(), signer, action)]); }
+        catch (e) { setError(userMessage(e, 'Check the proposal details and try again.')); }
+      }} />}
     </>}
     {tab === 'Settings' && <>
       <Copy style={s.section}>Spending</Copy><Panel>
@@ -344,9 +472,23 @@ export function LiveApp({ active = true, onLiveDemo, onBusy }: { active?: boolea
   return <SafeAreaView style={s.root}><AppHeader wallet={wallet?.address} busy={busy} onConnect={() => { void connect(); }} onAccount={account} />
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
       {error && <Copy accessibilityRole="alert" style={[common.muted, { fontSize: 13 }]}>{error}</Copy>}
+      {incomingAlertId && wallet && error && <Button title="Retry opening alert" tone="secondary" disabled={busy} onPress={() => setIncomingAttempt(value => value + 1)} />}
+      {!storageReady && <Button title="Retry transaction-status check" tone="secondary" onPress={() => { void restoreStatus(); }} />}
       {content}
     </ScrollView></KeyboardAvoidingView>
     <AppTabBar selected={tab} onSelect={setTab} disabled={transactionBusy(tx)} />
+    {call && <GuardianCall key={call.request.id} request={call.request}
+      outcome={view && (!boundWithdrawal(view, call.alert) || (!protection.error && !protection.alerts.some(a => a.id === call.alert.id))) ? 'closed' : undefined}
+      submit={async decision => {
+        if (decision === 'allow') { await dismissLive(call.alert); return 'You recognised the withdrawal. Its original delay still applies.'; }
+        if (!view || !boundWithdrawal(view, call.alert)) throw new Error('This withdrawal is no longer open. Refresh the vault.');
+        const result = await perform(async signer => {
+          const request = await client.fetchWithdrawal(key(call.alert.withdrawal!.pda), view.vault.address);
+          return [await client.cancelWithdrawal(signer, request)];
+        });
+        if (result?.phase !== 'confirmed') throw new Error(result?.message ?? 'Cancellation was not confirmed. Check transaction status in the vault.');
+        return 'Cancelled on-chain with your wallet. The money stays in the vault.';
+      }} onClose={() => setCall(null)} />}
   </SafeAreaView>;
 }
 
@@ -373,11 +515,14 @@ const s = StyleSheet.create({
   section: { fontFamily: f.semibold, fontSize: 15, paddingHorizontal: 4 },
 });
 
-function VaultActivity({ history, limit = 10 }: { history: VaultView['history']; limit?: number }) {
+function VaultActivity({ history, events, limit = 10 }: { history: VaultView['history']; events?: HistoryEntry[]; limit?: number }) {
   return <View style={{ gap: 12 }}><Copy style={{ fontFamily: f.semibold, fontSize: 15, paddingHorizontal: 4 }}>Recent activity</Copy><Panel>
     {history === null ? <Copy style={common.muted}>Transaction history is unavailable. Refresh to try again.</Copy>
       : history.length === 0 ? <View style={{ gap: 8 }}><Copy>Nothing here yet</Copy><Copy style={common.muted}>Events appear as soon as Argus sees them on-chain.</Copy></View>
-        : <ActivityTimeline entries={history.slice(0, limit).map(item => ({ id: item.signature,
+        : events ? <ActivityTimeline entries={events.slice(0, limit).map(item => ({ id: item.id, title: item.title,
+          detail: item.at === null ? 'Confirmed on devnet' : new Date(item.at * 1000).toLocaleString(), done: item.done,
+          onPress: () => { void Linking.openURL(`https://explorer.solana.com/tx/${item.signature}?cluster=devnet`); },
+        }))} /> : <ActivityTimeline entries={history.slice(0, limit).map(item => ({ id: item.signature,
           title: item.err ? 'Transaction failed' : item.confirmationStatus === 'finalized' ? 'Transaction finalized' : 'Transaction confirmed',
           detail: item.blockTime == null ? `Slot ${item.slot}` : new Date(item.blockTime * 1000).toLocaleString(), done: !item.err,
           onPress: () => { void Linking.openURL(`https://explorer.solana.com/tx/${item.signature}?cluster=devnet`); },

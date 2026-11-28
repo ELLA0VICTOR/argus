@@ -441,7 +441,7 @@ function GetArgus() {
   return (
     <Section id="get" className="mx-auto max-w-[1120px] px-5 pt-32 sm:px-8 lg:pt-40">
       <Heading a="Your vault," b="on every device" center />
-      <p className="reveal mt-4 text-center text-[17px] text-muted">Approve, cancel and freeze from wherever you are. Alerts arrive as calls and push notifications.</p>
+      <p className="reveal mt-4 text-center text-[17px] text-muted">Open your vault, answer an Argus call, and approve, cancel or freeze with your wallet.</p>
       <div className="mt-12 grid gap-5 md:grid-cols-3">
         <GetCard
           d={0}
